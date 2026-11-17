@@ -6,8 +6,10 @@ import { FileCheck2, ImagePlus, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { shrinkImage } from "@/components/admin/image-upload";
 
-const MAX = 5 * 1024 * 1024;
+// 4 MB: las plataformas serverless (Vercel) rechazan cuerpos de petición mayores a ~4,5 MB
+const MAX = 4 * 1024 * 1024;
 
 export function ProofUploader({ code, rejected }: { code: string; rejected?: boolean }) {
   const router = useRouter();
@@ -17,11 +19,12 @@ export function ProofUploader({ code, rejected }: { code: string; rejected?: boo
   const [op, setOp] = useState("");
   const [busy, setBusy] = useState(false);
 
-  function pick(f: File | null) {
+  async function pick(input: File | null) {
     if (preview) URL.revokeObjectURL(preview);
-    if (!f) return (setFile(null), setPreview(null));
-    if (!/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(f.type)) return toast.error("Formato no permitido. Usa JPG, PNG, WebP o PDF.");
-    if (f.size > MAX) return toast.error("El archivo supera los 5 MB.");
+    if (!input) return (setFile(null), setPreview(null));
+    if (!/^(image\/(jpeg|png|webp)|application\/pdf)$/.test(input.type)) return toast.error("Formato no permitido. Usa JPG, PNG, WebP o PDF.");
+    const f = input.type.startsWith("image/") ? await shrinkImage(input) : input; // las fotos grandes se reducen
+    if (f.size > MAX) return toast.error("El archivo supera los 4 MB.");
     setFile(f);
     setPreview(f.type.startsWith("image/") ? URL.createObjectURL(f) : null);
   }
@@ -59,7 +62,7 @@ export function ProofUploader({ code, rejected }: { code: string; rejected?: boo
         </div>
       ) : (
         <button type="button" onClick={() => ref.current?.click()} className="flex w-full flex-col items-center gap-2 rounded-xl border border-neutral-200 bg-mist px-4 py-8 text-sm text-stone transition hover:border-brand hover:text-brand">
-          <ImagePlus className="h-8 w-8" /> Toca para elegir una imagen o PDF (máx. 5 MB)
+          <ImagePlus className="h-8 w-8" /> Toca para elegir una imagen o PDF (máx. 4 MB)
         </button>
       )}
       <div>

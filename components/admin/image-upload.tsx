@@ -8,14 +8,39 @@ import { cn } from "@/lib/utils";
 
 export type UploadFolder = "products" | "banners" | "categories" | "branding";
 
-export async function uploadImage(file: File, folder: UploadFolder): Promise<string> {
-  if (file.type && !/^image\/(jpeg|png|webp|avif|gif)$/.test(file.type)) throw new Error(`Formato no permitido (${file.type}). Usa JPG, PNG, WebP, AVIF o GIF.`);
-  if (file.size > 8 * 1024 * 1024) throw new Error("La imagen supera los 8 MB.");
+// Las plataformas serverless (Vercel) rechazan cuerpos de petición > ~4,5 MB:
+// las fotos grandes se reducen en el navegador antes de subirlas (máx. 2400 px, WebP).
+const SHRINK_ABOVE = 2.5 * 1024 * 1024;
+
+export async function shrinkImage(file: File): Promise<File> {
+  if (file.size <= SHRINK_ABOVE || typeof createImageBitmap === "undefined") return file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    bmp.close();
+    const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, "image/webp", 0.85));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, "") + ".webp", { type: "image/webp" });
+  } catch {
+    return file; // el navegador no pudo decodificarla: se envía el original
+  }
+}
+
+export async function uploadImage(original: File, folder: UploadFolder): Promise<string> {
+  if (original.type && !/^image\/(jpeg|png|webp|avif|gif)$/.test(original.type)) throw new Error(`Formato no permitido (${original.type}). Usa JPG, PNG, WebP, AVIF o GIF.`);
+  if (original.size > 25 * 1024 * 1024) throw new Error("La imagen es demasiado grande (máx. 25 MB).");
+  const file = await shrinkImage(original);
+  if (file.size > 4 * 1024 * 1024) throw new Error("La imagen sigue siendo muy pesada (máx. 4 MB). Redúcela o usa otra foto.");
   const fd = new FormData();
   fd.set("file", file);
   fd.set("folder", folder);
   const res = await fetch("/api/admin/upload", { method: "POST", body: fd });
-  const data = await res.json().catch(() => ({ ok: false, error: "Respuesta inválida del servidor." }));
+  if (res.status === 413) throw new Error("La imagen es demasiado pesada para el servidor (máx. ~4 MB).");
+  const data = await res.json().catch(() => ({ ok: false, error: `El servidor respondió ${res.status}.` }));
   if (!data.ok) throw new Error(data.error ?? "No se pudo subir la imagen.");
   return data.url as string;
 }

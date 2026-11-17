@@ -1,12 +1,15 @@
 import type { NextConfig } from "next";
 
-// Host público opcional del bucket S3/CDN (para next/image)
+// Imágenes remotas permitidas en next/image: Vercel Blob y, opcionalmente, el bucket S3/CDN
+const blobPattern = { protocol: "https" as const, hostname: "*.public.blob.vercel-storage.com", port: "", pathname: "/**" };
+
 function s3Pattern() {
   const base = process.env.S3_PUBLIC_BASE_URL;
-  if (!base) return [];
+  if (!base) return [blobPattern];
   try {
     const u = new URL(base);
     return [
+      blobPattern,
       {
         protocol: u.protocol.replace(":", "") as "http" | "https",
         hostname: u.hostname,
@@ -15,7 +18,7 @@ function s3Pattern() {
       },
     ];
   } catch {
-    return [];
+    return [blobPattern];
   }
 }
 

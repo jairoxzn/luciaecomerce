@@ -3,23 +3,38 @@ import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
 import sharp from "sharp";
+import { del as blobDel, head as blobHead, put as blobPut } from "@vercel/blob";
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { UserError } from "@/lib/action";
 
 /**
- * Almacenamiento de archivos (nunca en PostgreSQL).
- *  - STORAGE_DRIVER=local → carpeta UPLOAD_DIR (montar volumen persistente en producción)
- *  - STORAGE_DRIVER=s3    → cualquier servicio S3-compatible (AWS S3, Cloudflare R2, MinIO, Backblaze…)
+ * Almacenamiento de archivos (nunca en PostgreSQL). Drivers:
+ *  - local → carpeta UPLOAD_DIR (VPS/Docker con volumen persistente). NO funciona en Vercel (disco de solo lectura).
+ *  - s3    → cualquier servicio S3-compatible (AWS S3, Cloudflare R2, MinIO, Backblaze…)
+ *  - blob  → Vercel Blob (variable BLOB_READ_WRITE_TOKEN; en Vercel se elige solo si existe el token)
  *
- * Carpetas públicas (se sirven por /media): products, banners, categories, branding.
- * Carpeta privada: proofs (comprobantes) → solo se leen por rutas autenticadas.
+ * Carpetas públicas (se sirven por URL pública): products, banners, categories, branding.
+ * Carpeta privada: proofs (comprobantes) → solo se leen por rutas autenticadas; su URL nunca se expone.
  */
 
 export type PublicFolder = "products" | "banners" | "categories" | "branding";
 export const PUBLIC_FOLDERS: readonly string[] = ["products", "banners", "categories", "branding"];
 
-const driver = () => (process.env.STORAGE_DRIVER === "s3" ? "s3" : "local");
+type Driver = "local" | "s3" | "blob";
+const onVercel = () => !!process.env.VERCEL;
+
+function driver(): Driver {
+  const d = process.env.STORAGE_DRIVER;
+  if (d === "s3") return "s3";
+  if (d === "blob") return "blob";
+  // En Vercel, si hay token de Blob se usa automáticamente (aunque STORAGE_DRIVER siga en "local")
+  if (onVercel() && process.env.BLOB_READ_WRITE_TOKEN) return "blob";
+  return "local";
+}
 const uploadDir = () => path.resolve(process.env.UPLOAD_DIR || "./storage");
+
+const NOT_CONFIGURED_VERCEL =
+  "El almacenamiento de imágenes no está configurado en Vercel. En Vercel → Storage crea un Blob store y conéctalo al proyecto (variable BLOB_READ_WRITE_TOKEN), o configura S3 (STORAGE_DRIVER=s3 y variables S3_*). Luego vuelve a desplegar.";
 
 let s3Client: S3Client | null = null;
 function s3() {
@@ -39,19 +54,17 @@ function s3() {
 }
 
 export function storageStatus() {
-  if (driver() === "local") return { driver: "local" as const, configured: true, detail: `Carpeta: ${uploadDir()}` };
-  const ok = !!(process.env.S3_BUCKET && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY);
-  return { driver: "s3" as const, configured: ok, detail: ok ? `Bucket: ${process.env.S3_BUCKET}` : "Faltan variables S3_*" };
-}
-
-async function putObject(key: string, body: Buffer, contentType: string) {
-  if (driver() === "s3") {
-    await s3().send(new PutObjectCommand({ Bucket: process.env.S3_BUCKET!, Key: key, Body: body, ContentType: contentType }));
-    return;
+  const d = driver();
+  if (d === "blob") {
+    const ok = !!process.env.BLOB_READ_WRITE_TOKEN;
+    return { driver: "blob" as const, configured: ok, detail: ok ? "Vercel Blob" : "Falta BLOB_READ_WRITE_TOKEN" };
   }
-  const full = safeLocalPath(key);
-  await fs.mkdir(path.dirname(full), { recursive: true });
-  await fs.writeFile(full, body);
+  if (d === "s3") {
+    const ok = !!(process.env.S3_BUCKET && process.env.S3_ACCESS_KEY_ID && process.env.S3_SECRET_ACCESS_KEY);
+    return { driver: "s3" as const, configured: ok, detail: ok ? `Bucket: ${process.env.S3_BUCKET}` : "Faltan variables S3_*" };
+  }
+  if (onVercel()) return { driver: "local" as const, configured: false, detail: "En Vercel el disco es de solo lectura: conecta Vercel Blob o S3" };
+  return { driver: "local" as const, configured: true, detail: `Carpeta: ${uploadDir()}` };
 }
 
 function safeLocalPath(key: string) {
@@ -61,9 +74,48 @@ function safeLocalPath(key: string) {
   return full;
 }
 
+/** Guarda un objeto. Devuelve la URL pública cuando el driver la entrega (blob). */
+async function putObject(key: string, body: Buffer, contentType: string): Promise<{ url?: string }> {
+  const d = driver();
+  if (d === "blob") {
+    try {
+      const r = await blobPut(key, body, { access: "public", addRandomSuffix: false, allowOverwrite: false, contentType });
+      return { url: r.url };
+    } catch (e) {
+      console.error("[storage] Vercel Blob", e);
+      throw new UserError("No se pudo guardar el archivo en Vercel Blob. Revisa BLOB_READ_WRITE_TOKEN.");
+    }
+  }
+  if (d === "s3") {
+    await s3().send(new PutObjectCommand({ Bucket: process.env.S3_BUCKET!, Key: key, Body: body, ContentType: contentType }));
+    return {};
+  }
+  if (onVercel()) throw new UserError(NOT_CONFIGURED_VERCEL);
+  const full = safeLocalPath(key);
+  try {
+    await fs.mkdir(path.dirname(full), { recursive: true });
+    await fs.writeFile(full, body);
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    console.error("[storage] escritura local", e);
+    if (code === "EROFS" || code === "EACCES" || code === "EPERM") {
+      throw new UserError("No se puede escribir en la carpeta de archivos (solo lectura o sin permisos). Revisa UPLOAD_DIR o usa S3 / Vercel Blob.");
+    }
+    throw e;
+  }
+  return {};
+}
+
 export async function readObject(key: string): Promise<{ body: Buffer; contentType: string } | null> {
   try {
-    if (driver() === "s3") {
+    const d = driver();
+    if (d === "blob") {
+      const meta = await blobHead(key);
+      const res = await fetch(meta.url, { cache: "no-store" });
+      if (!res.ok) return null;
+      return { body: Buffer.from(await res.arrayBuffer()), contentType: meta.contentType || guessType(key) };
+    }
+    if (d === "s3") {
       const res = await s3().send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET!, Key: key }));
       const bytes = await res.Body?.transformToByteArray();
       if (!bytes) return null;
@@ -80,11 +132,10 @@ export async function deleteByUrlOrKey(urlOrKey: string | null | undefined) {
   const key = keyFromUrl(urlOrKey);
   if (!key) return;
   try {
-    if (driver() === "s3") {
-      await s3().send(new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET!, Key: key }));
-    } else {
-      await fs.unlink(safeLocalPath(key));
-    }
+    const d = driver();
+    if (d === "blob") await blobDel(urlOrKey && /^https?:\/\//.test(urlOrKey) ? urlOrKey : key);
+    else if (d === "s3") await s3().send(new DeleteObjectCommand({ Bucket: process.env.S3_BUCKET!, Key: key }));
+    else await fs.unlink(safeLocalPath(key));
   } catch {
     /* archivo ya inexistente */
   }
@@ -103,10 +154,17 @@ export function keyFromUrl(url: string | null | undefined): string | null {
   if (url.startsWith("/media/")) return url.slice("/media/".length);
   const base = process.env.S3_PUBLIC_BASE_URL?.replace(/\/$/, "");
   if (base && url.startsWith(base + "/")) return url.slice(base.length + 1);
+  try {
+    const u = new URL(url);
+    if (u.hostname.endsWith(".public.blob.vercel-storage.com")) return decodeURIComponent(u.pathname.replace(/^\//, ""));
+  } catch {
+    /* no es una URL */
+  }
   return null;
 }
 
-function publicUrl(key: string) {
+function publicUrl(key: string, direct?: string) {
+  if (direct) return direct;
   const base = process.env.S3_PUBLIC_BASE_URL?.replace(/\/$/, "");
   if (driver() === "s3" && base) return `${base}/${key}`;
   return `/media/${key}`;
@@ -128,7 +186,8 @@ function detect(buf: Buffer): Detected | null {
 }
 
 export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
-export const MAX_PROOF_BYTES = 5 * 1024 * 1024;
+// 4 MB: Vercel rechaza cuerpos de petición mayores a ~4,5 MB
+export const MAX_PROOF_BYTES = 4 * 1024 * 1024;
 
 /** Imagen pública (producto, banner, categoría…): valida, quita metadatos y optimiza a WebP. */
 export async function saveImage(file: File, folder: PublicFolder, opts?: { maxWidth?: number }) {
@@ -147,13 +206,13 @@ export async function saveImage(file: File, folder: PublicFolder, opts?: { maxWi
     throw new UserError("No se pudo procesar la imagen. El archivo puede estar dañado.");
   }
   const key = `${folder}/${randomUUID()}.webp`;
-  await putObject(key, out, "image/webp");
-  return { key, url: publicUrl(key) };
+  const stored = await putObject(key, out, "image/webp");
+  return { key, url: publicUrl(key, stored.url) };
 }
 
 /** Comprobante de pago (privado): imagen o PDF validados por firma. */
 export async function saveProof(file: File) {
-  if (file.size > MAX_PROOF_BYTES) throw new UserError("El comprobante supera el tamaño máximo de 5 MB.");
+  if (file.size > MAX_PROOF_BYTES) throw new UserError("El comprobante supera el tamaño máximo de 4 MB.");
   const buf = Buffer.from(await file.arrayBuffer());
   const kind = detect(buf);
   if (!kind || kind === "avif" || kind === "gif") throw new UserError("Formato no permitido. Sube una imagen (JPG, PNG, WebP) o un PDF.");

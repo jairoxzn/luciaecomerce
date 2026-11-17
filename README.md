@@ -17,7 +17,7 @@ Sistema funcional con base de datos real: catálogo con variantes (talla/color),
 | Datos | PostgreSQL (Neon) · Prisma 6 |
 | Formularios/estado | React Hook Form · Zod · Zustand (carrito, favoritos) |
 | Auth | Sesiones propias en BD (cookie `httpOnly`, token HMAC-SHA256 hasheado) · bcrypt (costo 12) · 2 roles: `ADMIN`, `CUSTOMER` |
-| Archivos | Almacenamiento configurable: **local** (volumen) o **S3-compatible** (AWS S3, Cloudflare R2, MinIO, Backblaze…). Nunca en PostgreSQL |
+| Archivos | Almacenamiento configurable: **Vercel Blob**, **S3-compatible** (AWS S3, Cloudflare R2, MinIO, Backblaze…) o **local** (VPS/Docker con volumen). Nunca en PostgreSQL |
 | Reportes | exceljs (Excel) · pdfkit (PDF) |
 | Pruebas | Vitest (unitarias + integración contra esquema aislado) |
 
@@ -93,7 +93,7 @@ Ver [`.env.example`](.env.example). Resumen:
 
 - **Optimización**: todas las imágenes de catálogo pasan por `next/image` → se sirven en **AVIF/WebP** con tamaños adaptados al dispositivo (`next.config.ts` → `images`), lazy loading y caché de 30 días.
 - **Subidas del admin**: se validan por **firma binaria** (no por extensión), máx. 8 MB, se re-codifican a WebP (quita EXIF) y se guardan con nombre UUID en `products/`, `banners/`, `categories/`, `branding/`.
-- **Comprobantes de pago**: carpeta privada `proofs/` (máx. 5 MB; imagen o PDF). Solo se leen por `/api/proofs/[id]` con autorización (administrador o dueño del pedido). **Nunca** se sirven públicamente.
+- **Comprobantes de pago**: carpeta privada `proofs/` (máx. 4 MB; imagen o PDF). Solo se leen por `/api/proofs/[id]` con autorización (administrador o dueño del pedido). **Nunca** se sirven públicamente.
 - Archivos públicos se sirven por `/media/*` (local) o por la URL pública del bucket (`S3_PUBLIC_BASE_URL`).
 - **Producción con Docker/VPS**: monta un volumen persistente en `UPLOAD_DIR`, o usa `STORAGE_DRIVER=s3` (recomendado si escalas a varias instancias).
 
@@ -160,7 +160,19 @@ npm ci && npx prisma migrate deploy && npm run build
 npm start        # o: pm2 start npm --name lucia -- start
 ```
 
-### Opción C · Plataformas compatibles con Next.js
+### Opción C · Vercel
+
+Vercel no permite escribir en disco, por eso `STORAGE_DRIVER=local` **no funciona** allí (las subidas de imágenes fallarían). Usa **Vercel Blob** (lo más simple) o S3:
+
+1. En Vercel → tu proyecto → **Storage** → *Create* → **Blob** → conéctalo al proyecto. Vercel agrega `BLOB_READ_WRITE_TOKEN` automáticamente (no hace falta tocar `STORAGE_DRIVER`: con ese token y `VERCEL=1` se usa Blob solo).
+2. Define el resto de variables (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `AUTH_SECRET`, `NEXT_PUBLIC_SITE_URL`, …) y **redespliega** (las variables nuevas solo aplican a nuevos despliegues).
+3. Ejecuta las migraciones/seed una vez desde tu equipo apuntando a Neon (`npx prisma migrate deploy` y `npm run db:seed`).
+4. Límite de Vercel: ~4,5 MB por petición. El panel reduce automáticamente las fotos grandes antes de subirlas; los comprobantes admiten hasta 4 MB.
+5. Los comprobantes de pago se guardan con nombre aleatorio y **nunca se publica su URL**: solo se leen por `/api/proofs/[id]` con autorización. Si necesitas almacenamiento verdaderamente privado, usa S3/R2 con bucket privado.
+
+Si la subida falla, *Admin → Configuración* muestra el estado del almacenamiento y el mensaje de error indica qué falta.
+
+### Opción D · Otras plataformas compatibles con Next.js
 Define las variables de entorno, usa `STORAGE_DRIVER=s3` (los sistemas de archivos suelen ser efímeros) y ejecuta `prisma migrate deploy` en el paso de release.
 
 ### Dominio y HTTPS

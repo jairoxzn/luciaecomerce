@@ -88,7 +88,7 @@ describe("flujo de pago manual (Yape/Plin) con validación administrativa", () =
     const fake = new File([new Uint8Array(200).fill(65)], "virus.png", { type: "image/png" });
     await expect(submitPaymentProof({ orderId, file: fake })).rejects.toThrow(/Formato no permitido/);
     const big = new File([new Uint8Array(6 * 1024 * 1024)], "grande.png", { type: "image/png" });
-    await expect(submitPaymentProof({ orderId, file: big })).rejects.toThrow(/5 MB/);
+    await expect(submitPaymentProof({ orderId, file: big })).rejects.toThrow(/4 MB/);
     expect((await st()).payment.status).toBe("PENDIENTE");
     expect(await prisma.paymentProof.count()).toBe(0);
   });
