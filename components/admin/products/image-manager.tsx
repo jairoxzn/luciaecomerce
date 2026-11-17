@@ -54,7 +54,7 @@ export function ImageManager({ productId, images, colors }: { productId: string;
 
   return (
     <Card title="Fotografías" action={<span className="text-xs text-stone">La primera es la imagen principal</span>}>
-      <input ref={ref} type="file" multiple accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => upload(e.target.files)} aria-label="Subir fotografías" />
+      <input ref={ref} type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif,image/gif" className="sr-only" onChange={(e) => upload(e.target.files)} aria-label="Subir fotografías" />
       <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {images.map((im, idx) => (
           <li key={im.id} className="space-y-2">
@@ -79,7 +79,7 @@ export function ImageManager({ productId, images, colors }: { productId: string;
           <button type="button" onClick={() => ref.current?.click()} disabled={busy} className="flex aspect-[3/4] w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 bg-mist px-2 text-center text-sm text-stone transition hover:border-brand hover:text-brand">
             {busy ? <Loader2 className="h-6 w-6 animate-spin" /> : <ImagePlus className="h-6 w-6" />}
             {busy ? progress : "Subir fotos"}
-            <span className="text-[11px]">JPG, PNG o WebP · máx. 8 MB</span>
+            <span className="text-[11px]">JPG, PNG, WebP, AVIF o GIF · máx. 8 MB</span>
           </button>
         </li>
       </ul>

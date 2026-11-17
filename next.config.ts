@@ -35,6 +35,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Permite compilar en otra carpeta sin pisar `.next` del servidor de desarrollo (NEXT_DIST_DIR=.next-build)
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   poweredByHeader: false,
   reactStrictMode: true,
   serverExternalPackages: ["@prisma/client", "pdfkit", "exceljs", "sharp"],

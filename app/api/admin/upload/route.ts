@@ -22,6 +22,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, url: saved.url });
   } catch (e) {
     if (e instanceof AuthError) return NextResponse.json({ ok: false, error: e.message }, { status: e.code === "UNAUTHENTICATED" ? 401 : 403 });
-    return NextResponse.json(toFail(e), { status: 400 });
+    const r = toFail(e);
+    // Un cuerpo corrupto o cortado (conexión interrumpida) llega como error genérico: mensaje claro
+    if (e instanceof TypeError) return NextResponse.json({ ok: false, error: "La subida se interrumpió. Inténtalo de nuevo." }, { status: 400 });
+    return NextResponse.json(r, { status: 400 });
   }
 }

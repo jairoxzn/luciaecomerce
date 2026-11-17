@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 export type UploadFolder = "products" | "banners" | "categories" | "branding";
 
 export async function uploadImage(file: File, folder: UploadFolder): Promise<string> {
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("Formato no permitido. Usa JPG, PNG o WebP.");
+  if (file.type && !/^image\/(jpeg|png|webp|avif|gif)$/.test(file.type)) throw new Error(`Formato no permitido (${file.type}). Usa JPG, PNG, WebP, AVIF o GIF.`);
   if (file.size > 8 * 1024 * 1024) throw new Error("La imagen supera los 8 MB.");
   const fd = new FormData();
   fd.set("file", file);
@@ -42,7 +42,7 @@ export function ImageField({ value, onChange, folder, label, aspect = "aspect-vi
   return (
     <div>
       <p className="mb-1.5 text-sm font-medium">{label}</p>
-      <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => pick(e.target.files?.[0])} aria-label={label} />
+      <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" className="sr-only" onChange={(e) => pick(e.target.files?.[0])} aria-label={label} />
       {value ? (
         <div className={cn("group relative w-full max-w-xs overflow-hidden rounded-xl border border-neutral-200 bg-mist", aspect)}>
           <Image src={value} alt={label} fill sizes="320px" className="object-contain" />

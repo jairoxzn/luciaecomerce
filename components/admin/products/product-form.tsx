@@ -31,7 +31,7 @@ export function ProductForm({ categories, product }: { categories: CategoryOptio
     const next = [...files];
     for (const f of Array.from(list)) {
       if (next.length >= 10) { toast.error("Máximo 10 fotos por producto."); break; }
-      if (!/^image\/(jpeg|png|webp)$/.test(f.type)) { toast.error(`${f.name}: usa JPG, PNG o WebP.`); continue; }
+      if (f.type && !/^image\/(jpeg|png|webp|avif|gif)$/.test(f.type)) { toast.error(`${f.name}: formato no permitido (usa JPG, PNG, WebP, AVIF o GIF).`); continue; }
       if (f.size > 8 * 1024 * 1024) { toast.error(`${f.name}: supera los 8 MB.`); continue; }
       next.push({ file: f, preview: URL.createObjectURL(f) });
     }
@@ -95,7 +95,7 @@ export function ProductForm({ categories, product }: { categories: CategoryOptio
 
         {!product && (
           <Card title="Fotografías" action={<span className="text-xs text-stone">La primera será la imagen principal</span>}>
-            <input ref={fileRef} type="file" multiple accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(e) => pickFiles(e.target.files)} aria-label="Elegir fotografías del producto" />
+            <input ref={fileRef} type="file" multiple accept="image/jpeg,image/png,image/webp,image/avif,image/gif" className="sr-only" onChange={(e) => pickFiles(e.target.files)} aria-label="Elegir fotografías del producto" />
             <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4">
               {files.map((f, i) => (
                 <li key={f.preview} className="relative">
@@ -109,7 +109,7 @@ export function ProductForm({ categories, product }: { categories: CategoryOptio
               <li>
                 <button type="button" onClick={() => fileRef.current?.click()} className="flex aspect-[3/4] w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-neutral-300 bg-mist px-2 text-center text-sm text-stone transition hover:border-brand hover:text-brand">
                   <ImagePlus className="h-6 w-6" /> Elegir fotos
-                  <span className="text-[11px]">JPG, PNG o WebP · máx. 8 MB c/u</span>
+                  <span className="text-[11px]">JPG, PNG, WebP, AVIF o GIF · máx. 8 MB c/u</span>
                 </button>
               </li>
             </ul>
