@@ -1,7 +1,62 @@
 import type { NextConfig } from "next";
 
+// Host público opcional del bucket S3/CDN (para next/image)
+function s3Pattern() {
+  const base = process.env.S3_PUBLIC_BASE_URL;
+  if (!base) return [];
+  try {
+    const u = new URL(base);
+    return [
+      {
+        protocol: u.protocol.replace(":", "") as "http" | "https",
+        hostname: u.hostname,
+        port: u.port,
+        pathname: "/**",
+      },
+    ];
+  } catch {
+    return [];
+  }
+}
+
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  {
+    key: "Content-Security-Policy",
+    value: "frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'",
+  },
+  ...(process.env.NODE_ENV === "production"
+    ? [{ key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" }]
+    : []),
+];
+
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: "standalone",
+  poweredByHeader: false,
+  reactStrictMode: true,
+  serverExternalPackages: ["@prisma/client", "pdfkit", "exceljs", "sharp"],
+  images: {
+    // next/image convierte automáticamente a AVIF/WebP y genera tamaños por dispositivo
+    formats: ["image/avif", "image/webp"],
+    deviceSizes: [360, 480, 640, 768, 1024, 1280, 1536, 1920],
+    imageSizes: [64, 96, 128, 192, 256, 384],
+    minimumCacheTTL: 60 * 60 * 24 * 30,
+    qualities: [60, 75, 85, 90],
+    remotePatterns: s3Pattern(),
+  },
+  // pdfkit lee sus fuentes (.afm) del disco en tiempo de ejecución: se incluyen en el build standalone
+  outputFileTracingIncludes: {
+    "/api/admin/reports/export": ["./node_modules/pdfkit/js/data/**/*"],
+  },
+  experimental: {
+    serverActions: { bodySizeLimit: "2mb" },
+  },
+  async headers() {
+    return [{ source: "/:path*", headers: securityHeaders }];
+  },
 };
 
 export default nextConfig;

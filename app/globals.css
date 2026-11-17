@@ -1,26 +1,85 @@
 @import "tailwindcss";
 
+/* ───────── Sistema de diseño LUCIA JEANS ───────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --brand: #e65385;
+  --brand-dark: #cf3d70;
+  --brand-soft: #f7b7cd;
+  --brand-tint: #fceaf1;
+  --ink: #171717;
+  --paper: #ffffff;
+  --mist: #f5f5f5;
+  --stone: #737373;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-brand: var(--brand);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-tint: var(--brand-tint);
+  --color-ink: var(--ink);
+  --color-paper: var(--paper);
+  --color-mist: var(--mist);
+  --color-stone: var(--stone);
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  --font-script: var(--font-script), cursive;
+  --shadow-soft: 0 8px 30px -12px rgba(230, 83, 133, 0.35);
+  --shadow-card: 0 2px 12px -4px rgba(23, 23, 23, 0.12);
+  --animate-fade-up: fade-up 0.5s ease-out both;
+  --animate-shimmer: shimmer 1.6s infinite linear;
+  --animate-slide-in: slide-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-pop: pop 0.3s ease-out both;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+@keyframes slide-in {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes slide-in-left {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+@keyframes pop {
+  0% { transform: scale(0.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+html { scroll-behavior: smooth; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+::selection { background: var(--brand-soft); color: var(--ink); }
+
+.skeleton {
+  background: linear-gradient(90deg, #f1f1f1 25%, #fbe3ec 50%, #f1f1f1 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.6s infinite linear;
+  border-radius: 0.75rem;
+}
+
+.container-page { margin-inline: auto; width: 100%; max-width: 80rem; padding-inline: 1rem; }
+@media (min-width: 640px) { .container-page { padding-inline: 1.5rem; } }
+@media (min-width: 1024px) { .container-page { padding-inline: 2rem; } }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
+/* Foco accesible */
+:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }

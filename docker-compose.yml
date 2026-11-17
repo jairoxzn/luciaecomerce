@@ -1,0 +1,32 @@
+# LUCIA JEANS — despliegue con Docker Compose
+# La base de datos es Neon (externa). Las variables se leen del archivo .env (ver .env.example).
+#
+#   docker compose build
+#   docker compose --profile tools run --rm tools     # 1.ª vez: migraciones + datos iniciales (admin, categorías, demo)
+#   docker compose up -d app
+services:
+  app:
+    build:
+      context: .
+      target: runner
+    image: lucia-jeans:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      UPLOAD_DIR: /app/storage
+      RUN_MIGRATIONS: "true" # aplica migraciones pendientes en cada despliegue
+    ports:
+      - "3000:3000"
+    volumes:
+      - lucia_storage:/app/storage # imágenes y comprobantes (si STORAGE_DRIVER=local)
+
+  tools:
+    profiles: ["tools"]
+    build:
+      context: .
+      target: tools
+    env_file: .env
+
+volumes:
+  lucia_storage:

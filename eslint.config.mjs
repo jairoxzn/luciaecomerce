@@ -12,11 +12,20 @@ const compat = new FlatCompat({
 const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
+    rules: {
+      // Patrón usado en los handlers: r.ok ? toast.success() : toast.error()
+      "@typescript-eslint/no-unused-expressions": ["warn", { allowTernary: true, allowShortCircuit: true }],
+      // Vistas previas locales (blob:) y comprobantes privados no pasan por next/image
+      "@next/next/no-img-element": "off",
+    },
+  },
+  {
     ignores: [
       "node_modules/**",
       ".next/**",
       "out/**",
       "build/**",
+      ".test-storage/**",
       "next-env.d.ts",
     ],
   },
