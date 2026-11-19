@@ -19,12 +19,13 @@ export const metadata = { title: "Detalle de pedido" };
 
 export default async function AdminOrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const order = await getOrderView(id);
-  if (!order) notFound();
-  const [notifs, raw] = await Promise.all([
+  // El pedido, sus notificaciones y el cliente se piden a la vez (las dos últimas solo dependen del id de la URL)
+  const [order, notifs, raw] = await Promise.all([
+    getOrderView(id),
     prisma.notification.findMany({ where: { orderId: id, channel: "WHATSAPP" }, orderBy: { createdAt: "desc" }, take: 10 }),
     prisma.order.findUnique({ where: { id }, select: { userId: true, user: { select: { id: true, name: true } } } }),
   ]);
+  if (!order) notFound();
   const pay = order.payment;
   const allowed = allowedNextStatuses(order.status, pay);
   const wa = `https://wa.me/${normalizePeruPhone(order.customer.phone)}?text=${encodeURIComponent(`Hola ${order.customer.firstName}, te escribimos por tu pedido ${order.code} (estado: ${ORDER_STATUS_LABEL[order.status]}).`)}`;

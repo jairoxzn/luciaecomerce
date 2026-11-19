@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import { useSession } from "@/hooks/use-session";
 import { registerAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ export function RegisterForm({ next }: { next?: string }) {
           return toast.error(res.error);
         }
         toast.success(res.message ?? "Cuenta creada");
+        void useSession.getState().refresh(); // el header y los favoritos se actualizan sin recargar
         router.push(next && next.startsWith("/") && !next.startsWith("//") ? next : res.data!.redirectTo);
         router.refresh();
       })}

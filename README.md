@@ -64,6 +64,7 @@ Ver [`.env.example`](.env.example). Resumen:
 |---|---|---|
 | `DATABASE_URL` | Sí | Conexión **pooler** de Neon (runtime). Incluye `pgbouncer=true&connect_timeout=15&connection_limit=25&pool_timeout=30` |
 | `DATABASE_URL_UNPOOLED` | Sí | Conexión **directa** de Neon (migraciones de Prisma) |
+| `REDIS_URL` | No | Caché Redis (`redis://…` o `rediss://…`). Sin ella todo funciona igual, solo consulta la base de datos. Ver §9 |
 | `NEXT_PUBLIC_SITE_URL` | Sí | URL pública (`https://…`): SEO, sitemap, cookies `Secure` |
 | `AUTH_SECRET` | Sí | ≥16 caracteres. Firma tokens/cookies. `openssl rand -base64 32` |
 | `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | Solo seed | Administrador inicial |
@@ -118,6 +119,16 @@ Contraseñas con bcrypt · sesiones en BD con token hasheado (HMAC) y cookie `ht
 ## 9. SEO y rendimiento
 
 Metadata dinámica y Open Graph por página · URLs amigables (`/productos/[slug]`, `/categorias/[slug]`) · `sitemap.xml` y `robots.txt` dinámicos · JSON-LD `Product` · `canonical` · páginas privadas con `noindex` · imágenes AVIF/WebP + lazy loading + `sizes` · fuentes con `next/font` · mobile-first.
+
+**Rendimiento (qué se hace y dónde):**
+
+- **Caché Redis opcional** (`lib/cache.ts`, `REDIS_URL`): portada, listados comunes, detalle de producto, productos relacionados, ofertas, autocompletado, ajustes, categorías y promociones. Sin Redis (o si cae) se usa la base de datos: interruptor de circuito de 10 s, sin errores para el cliente. Las ediciones del panel y las compras invalidan la caché (`refreshStore` / `refreshStock`). Los TTL son cortos (60–300 s) como red de seguridad. Redis debe usar `maxmemory-policy allkeys-lru` (ya configurado en `docker-compose.yml`).
+- **Renderizado:** el layout de la tienda no lee cookies; `/productos/[slug]` y `/politicas/[slug]` se generan en la primera visita y se sirven desde caché (ISR, `generateStaticParams` vacío → el build **no** consulta la base de datos). La sesión y los favoritos los carga el navegador desde `/api/session` (privado, sin caché). El resto de páginas públicas se renderizan en cada petición (leen de Redis). *Limitación conocida:* en auto-alojado (Docker/VPS) Next también guarda en disco la página «no encontrado» de cada slug inexistente que alguien visite; en Vercel lo gestiona la plataforma. Si te preocupa el tráfico basura, ponle una CDN o un proxy con caché delante. (No se puede evitar con `connection()`: en generación ISR bajo demanda devuelve 500.)
+- **Búsqueda:** autocompletado con debounce de 300 ms, caché de resultados por sesión en el navegador, `Cache-Control` público corto en `/api/search` y límite de uso en Redis (no escribe en Postgres en cada pulsación).
+- **UI optimista:** favoritos, cantidades y eliminación en el carrito, y activar/desactivar/eliminar en cupones, promociones, banners, catálogos compartidos, productos (archivar/publicar) y direcciones. Los importes del carrito siguen viniendo siempre del servidor.
+- **Consultas en paralelo:** listados del catálogo, cotización del carrito, dashboard, inventario y detalle de pedido.
+- **Índices** de PostgreSQL para listados, portada, variantes, cupones y contador de mensajes (migración `performance_indexes`).
+- **Estáticos:** `/_next/static` e imágenes subidas (`/media`) son inmutables; `/demo` y `/brand` se cachean 30 días (si reemplazas uno, renómbralo).
 
 ## 10. Pruebas
 

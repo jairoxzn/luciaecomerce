@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { quoteCartAction } from "@/app/actions/cart";
 import type { Quote } from "@/lib/services/cart";
 import { useCart } from "./use-cart";
@@ -66,5 +66,15 @@ export function useCartQuote(opts: { delivery?: Delivery; enabled?: boolean } = 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, enabled, hydrated]);
 
-  return { quote, loading, error, empty: hydrated && items.length === 0, hydrated };
+  // Líneas "optimistas": al quitar un producto desaparece al instante, sin esperar a la nueva cotización.
+  // Si hay una variante nueva aún sin cotizar (cambio de color/talla en curso) se muestran las líneas tal cual llegaron.
+  const lines = useMemo(() => {
+    if (!quote) return null;
+    const local = new Set(items.map((i) => i.variantId));
+    const known = new Set(quote.lines.map((l) => l.variantId));
+    if (items.some((i) => !known.has(i.variantId))) return quote.lines;
+    return quote.lines.filter((l) => local.has(l.variantId));
+  }, [quote, items]);
+
+  return { quote, lines, loading, error, empty: hydrated && items.length === 0, hydrated };
 }

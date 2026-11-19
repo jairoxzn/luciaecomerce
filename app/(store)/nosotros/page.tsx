@@ -4,7 +4,8 @@ import { getSettings } from "@/lib/services/settings";
 import { LinkButton } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Nosotros", description: "Conoce la historia y los valores de LUCIA JEANS.", alternates: { canonical: "/nosotros" } };
-export const revalidate = 300;
+// Se renderiza en cada petición (los datos salen de la caché de Redis): el build no consulta la base de datos
+export const dynamic = "force-dynamic";
 
 export default async function AboutPage() {
   const s = await getSettings();

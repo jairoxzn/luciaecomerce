@@ -4,6 +4,9 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { getNavCategories } from "@/lib/services/catalog";
 
+// Se renderiza en cada petición (los datos salen de la caché de Redis): el build no consulta la base de datos
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = { title: "Categorías", description: "Encuentra tu estilo favorito: mujer, hombre, niños y accesorios.", alternates: { canonical: "/categorias" } };
 
 export default async function CategoriesPage() {

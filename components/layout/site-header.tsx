@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { logoutAction } from "@/app/actions/auth";
 import { useCart, cartCount } from "@/hooks/use-cart";
 import { useFavorites } from "@/hooks/use-favorites";
+import { useSession } from "@/hooks/use-session";
 import { Logo } from "@/components/ui/logo";
 import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
@@ -18,14 +19,14 @@ type Props = {
   storeName: string;
   logoUrl: string | null;
   categories: NavCategory[];
-  user: { name: string; role: "ADMIN" | "CUSTOMER" } | null;
   announcement: string | null;
 };
 
-export function SiteHeader({ storeName, logoUrl, categories, user, announcement }: Props) {
+export function SiteHeader({ storeName, logoUrl, categories, announcement }: Props) {
   const pathname = usePathname();
   const router = useRouter();
-  const items = useCart((s) => s.items);
+  const user = useSession((s) => s.user);
+  const cartQty = useCart((s) => cartCount(s.items));
   const hydrated = useCart((s) => s.hydrated);
   const openDrawer = useCart((s) => s.openDrawer);
   const favCount = useFavorites((s) => s.ids.size);
@@ -34,7 +35,7 @@ export function SiteHeader({ storeName, logoUrl, categories, user, announcement 
   const [accountOpen, setAccountOpen] = useState(false);
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
-  const count = hydrated ? cartCount(items) : 0;
+  const count = hydrated ? cartQty : 0;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -52,6 +53,7 @@ export function SiteHeader({ storeName, logoUrl, categories, user, announcement 
   async function logout() {
     await logoutAction();
     useCart.getState().clear();
+    useSession.getState().clear();
     toast.success("Sesión cerrada");
     router.push("/");
     router.refresh();

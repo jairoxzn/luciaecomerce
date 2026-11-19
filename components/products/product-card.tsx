@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ShoppingBag } from "lucide-react";
@@ -10,7 +10,8 @@ import type { ProductCardData } from "@/lib/services/catalog";
 import { FavoriteButton } from "./favorite-button";
 import { QuickBuyModal } from "./quick-buy";
 
-export function ProductCard({ product, priority = false, className }: { product: ProductCardData; priority?: boolean; className?: string }) {
+// memo: una tarjeta no se vuelve a renderizar si su producto no cambió (p. ej. al abrir el carrito o marcar otro favorito)
+export const ProductCard = memo(function ProductCard({ product, priority = false, className }: { product: ProductCardData; priority?: boolean; className?: string }) {
   const [quick, setQuick] = useState(false);
   const p = product;
   return (
@@ -74,7 +75,7 @@ export function ProductCard({ product, priority = false, className }: { product:
       {quick && <QuickBuyModal product={p} open={quick} onClose={() => setQuick(false)} />}
     </article>
   );
-}
+});
 
 export function ProductGrid({ products, className }: { products: ProductCardData[]; className?: string }) {
   return (

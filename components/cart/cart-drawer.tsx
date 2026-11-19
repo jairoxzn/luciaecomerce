@@ -15,7 +15,7 @@ import { CouponBox } from "./coupon-box";
 export function CartDrawer() {
   const open = useCart((s) => s.drawerOpen);
   const close = useCart((s) => s.closeDrawer);
-  const { quote, loading, empty } = useCartQuote({ enabled: open });
+  const { quote, lines, loading, empty } = useCartQuote({ enabled: open });
 
   return (
     <Modal open={open} onClose={close} title="Tu carrito" side="right">
@@ -38,7 +38,7 @@ export function CartDrawer() {
       ) : (
         <div className="flex flex-col gap-5">
           <ul className="space-y-3">
-            {quote.lines.map((l) => (
+            {(lines ?? quote.lines).map((l) => (
               <CartLineItem key={l.variantId} line={l} compact />
             ))}
           </ul>

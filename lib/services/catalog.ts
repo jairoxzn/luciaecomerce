@@ -2,6 +2,7 @@ import { cache } from "react";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { cached, cacheKey, invalidateInBackground } from "@/lib/cache";
 import { num } from "@/lib/utils";
 import { resolvePrice, type PromoRule } from "@/lib/pricing-core";
 import { loadActivePromotions } from "@/lib/services/pricing";
@@ -9,8 +10,16 @@ import { loadActivePromotions } from "@/lib/services/pricing";
 export const CATALOG_TAG = "catalog";
 export const PAGE_SIZE = 12;
 
+// TTL (segundos) de las entradas en Redis; los cambios del panel las invalidan de inmediato (refreshStore)
+const TTL_NAV = 300;
+const TTL_HOME = 120;
+const TTL_LIST = 60;
+const TTL_PRODUCT = 60;
+const TTL_SEARCH = 120;
+
 export function revalidateCatalog() {
   revalidateTag(CATALOG_TAG);
+  invalidateInBackground();
 }
 
 // ───────────────────────── Tipos ─────────────────────────
@@ -45,22 +54,23 @@ export type NavCategory = {
 // ───────────────────────── Categorías ─────────────────────────
 
 const getNavCategoriesCached = unstable_cache(
-  async (): Promise<NavCategory[]> => {
-    const cats = await prisma.category.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: "asc" },
-      include: { subcategories: { where: { isActive: true }, orderBy: { sortOrder: "asc" } } },
-    });
-    return cats.map((c) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      imageUrl: c.imageUrl,
-      description: c.description,
-      showOnHome: c.showOnHome,
-      subcategories: c.subcategories.map((s) => ({ id: s.id, name: s.name, slug: s.slug })),
-    }));
-  },
+  () =>
+    cached(cacheKey("nav-categories"), TTL_NAV, async (): Promise<NavCategory[]> => {
+      const cats = await prisma.category.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: "asc" },
+        include: { subcategories: { where: { isActive: true }, orderBy: { sortOrder: "asc" } } },
+      });
+      return cats.map((c) => ({
+        id: c.id,
+        name: c.name,
+        slug: c.slug,
+        imageUrl: c.imageUrl,
+        description: c.description,
+        showOnHome: c.showOnHome,
+        subcategories: c.subcategories.map((s) => ({ id: s.id, name: s.name, slug: s.slug })),
+      }));
+    }),
   ["nav-categories"],
   { tags: [CATALOG_TAG], revalidate: 300 },
 );
@@ -134,30 +144,40 @@ export type CatalogResult = {
   subcategory: { name: string; slug: string } | null;
 };
 
-export async function listProducts(f: CatalogFilters): Promise<CatalogResult> {
-  const promos = await loadActivePromotions();
-  const and: Prisma.ProductWhereInput[] = [];
-  let category: CatalogResult["category"] = null;
-  let subcategory: CatalogResult["subcategory"] = null;
-  let categoryId: string | null = null;
+/**
+ * Un listado solo se guarda en Redis si es una combinación «común» (sin texto libre, rango de precio ni páginas
+ * remotas): las claves dependen de la URL y no deben poder llenar la caché con combinaciones arbitrarias.
+ */
+export function isCacheableListing(f: CatalogFilters): boolean {
+  const small = (a?: string[]) => !a || (a.length <= 3 && a.every((s) => s.length <= 20));
+  return !f.q && f.min == null && f.max == null && (f.pagina ?? 1) <= 20 && small(f.tallas) && small(f.colores);
+}
 
-  if (f.categoria) {
-    const c = await prisma.category.findUnique({ where: { slug: f.categoria }, select: { id: true, name: true, slug: true, description: true } });
-    if (c) {
-      category = { name: c.name, slug: c.slug, description: c.description };
-      categoryId = c.id;
-      and.push({ categoryId: c.id });
-      if (f.subcategoria) {
-        const s = await prisma.subcategory.findFirst({ where: { categoryId: c.id, slug: f.subcategoria }, select: { id: true, name: true, slug: true } });
-        if (s) {
-          subcategory = s;
-          and.push({ subcategoryId: s.id });
-        }
-      }
-    } else {
-      and.push({ id: "__none__" });
-    }
-  }
+/** Listado con filtros; las combinaciones comunes se cachean en Redis (60 s, y se invalidan al editar el catálogo). */
+export function listProducts(f: CatalogFilters): Promise<CatalogResult> {
+  return isCacheableListing(f) ? cached(cacheKey("list", f), TTL_LIST, () => listProductsUncached(f)) : listProductsUncached(f);
+}
+
+/** Categoría y subcategoría de la URL (la subcategoría depende de la categoría, pero ambas son independientes del resto). */
+async function resolveCategory(f: CatalogFilters) {
+  if (!f.categoria) return { found: null, category: null, subcategory: null, categoryId: null as string | null };
+  const c = await prisma.category.findUnique({ where: { slug: f.categoria }, select: { id: true, name: true, slug: true, description: true } });
+  if (!c) return { found: false as const, category: null, subcategory: null, categoryId: null as string | null };
+  const s = f.subcategoria ? await prisma.subcategory.findFirst({ where: { categoryId: c.id, slug: f.subcategoria }, select: { id: true, name: true, slug: true } }) : null;
+  return { found: true as const, category: { name: c.name, slug: c.slug, description: c.description }, subcategory: s, categoryId: c.id as string | null };
+}
+
+async function listProductsUncached(f: CatalogFilters): Promise<CatalogResult> {
+  // Promociones y categoría no dependen entre sí
+  const [promos, resolved] = await Promise.all([loadActivePromotions(), resolveCategory(f)]);
+  const and: Prisma.ProductWhereInput[] = [];
+  const category: CatalogResult["category"] = resolved.category;
+  const subcategory: CatalogResult["subcategory"] = resolved.subcategory;
+  const categoryId = resolved.categoryId;
+
+  if (resolved.found === false) and.push({ id: "__none__" });
+  if (categoryId) and.push({ categoryId });
+  if (resolved.subcategory) and.push({ subcategoryId: resolved.subcategory.id });
   if (f.q?.trim()) {
     const q = f.q.trim().slice(0, 80);
     and.push({
@@ -185,11 +205,14 @@ export async function listProducts(f: CatalogFilters): Promise<CatalogResult> {
 
   const where: Prisma.ProductWhereInput = { status: "ACTIVE", AND: and };
 
-  // Para filtrar/ordenar por precio efectivo (con promociones) se calcula en memoria sobre filas livianas
-  const light = await prisma.product.findMany({
-    where,
-    select: { id: true, price: true, salePrice: true, categoryId: true, createdAt: true, soldCount: true },
-  });
+  // Filas livianas (para filtrar/ordenar por precio efectivo con promociones, en memoria) y facetas de talla/color:
+  // las tres consultas son independientes, así que viajan en paralelo.
+  const scope: Prisma.ProductWhereInput = { status: "ACTIVE", ...(categoryId ? { categoryId } : {}) };
+  const [light, sizes, colors] = await Promise.all([
+    prisma.product.findMany({ where, select: { id: true, price: true, salePrice: true, categoryId: true, createdAt: true, soldCount: true } }),
+    prisma.size.findMany({ where: { variants: { some: { isActive: true, product: scope } } }, orderBy: { sortOrder: "asc" }, select: { name: true } }),
+    prisma.color.findMany({ where: { variants: { some: { isActive: true, product: scope } } }, orderBy: { sortOrder: "asc" }, select: { name: true, hex: true } }),
+  ]);
   let rows = light.map((p) => ({
     ...p,
     eff: resolvePrice({ price: num(p.price), salePrice: p.salePrice ? num(p.salePrice) : null, categoryId: p.categoryId }, promos),
@@ -216,12 +239,6 @@ export async function listProducts(f: CatalogFilters): Promise<CatalogResult> {
   const full = ids.length ? await prisma.product.findMany({ where: { id: { in: ids } }, include: cardInclude }) : [];
   const byId = new Map(full.map((p) => [p.id, p]));
   const items = ids.map((id) => byId.get(id)).filter((p): p is CardRow => !!p).map((p) => toCard(p, promos));
-
-  const scope: Prisma.ProductWhereInput = { status: "ACTIVE", ...(categoryId ? { categoryId } : {}) };
-  const [sizes, colors] = await Promise.all([
-    prisma.size.findMany({ where: { variants: { some: { isActive: true, product: scope } } }, orderBy: { sortOrder: "asc" }, select: { name: true } }),
-    prisma.color.findMany({ where: { variants: { some: { isActive: true, product: scope } } }, orderBy: { sortOrder: "asc" }, select: { name: true, hex: true } }),
-  ]);
 
   return { items, total, page, pageCount, priceRange, facets: { sizes: sizes.map((s) => s.name), colors }, category, subcategory };
 }
@@ -253,7 +270,16 @@ export type ProductDetail = {
   updatedAt: string;
 };
 
-export async function getProductBySlug(slug: string): Promise<ProductDetail | null> {
+/**
+ * Detalle de producto. `cache` de React evita repetir la consulta entre generateMetadata y la página de una misma petición;
+ * Redis la comparte entre peticiones (60 s, invalidado al editar productos).
+ */
+export const getProductBySlug = cache((slug: string): Promise<ProductDetail | null> =>
+  // «No encontrado» no se guarda: un slug inventado no debe crear entradas en Redis
+  cached(cacheKey("product", slug), TTL_PRODUCT, () => loadProductBySlug(slug), (p) => p !== null),
+);
+
+async function loadProductBySlug(slug: string): Promise<ProductDetail | null> {
   const [p, promos] = await Promise.all([
     prisma.product.findUnique({
       where: { slug },
@@ -315,10 +341,12 @@ export async function getProductBySlug(slug: string): Promise<ProductDetail | nu
   };
 }
 
-export async function getRelatedProducts(productId: string, categoryId: string, subcategorySlug?: string | null, take = 4) {
-  const items = await cardsFor({ categoryId, id: { not: productId } }, [{ isBestSeller: "desc" }, { soldCount: "desc" }, { createdAt: "desc" }], take + 4);
+export function getRelatedProducts(productId: string, categoryId: string, subcategorySlug?: string | null, take = 4) {
   void subcategorySlug;
-  return items.slice(0, take);
+  return cached(cacheKey("related", { productId, categoryId, take }), TTL_PRODUCT * 2, async () => {
+    const items = await cardsFor({ categoryId, id: { not: productId } }, [{ isBestSeller: "desc" }, { soldCount: "desc" }, { createdAt: "desc" }], take + 4);
+    return items.slice(0, take);
+  });
 }
 
 // ───────────────────────── Inicio ─────────────────────────
@@ -346,10 +374,16 @@ export async function getBanners(position: "HERO" | "PROMO" | "COLLECTION"): Pro
   return rows.filter((r) => r.position === position).map(({ id, title, subtitle, ctaLabel, ctaHref, imageUrl, mobileImageUrl }) => ({ id, title, subtitle, ctaLabel, ctaHref, imageUrl, mobileImageUrl }));
 }
 
-export async function getHomeData() {
-  // Se limita la concurrencia (tandas) para no agotar el pool de conexiones
-  const [hero, promo, collections] = await Promise.all([getBanners("HERO"), getBanners("PROMO"), getBanners("COLLECTION")]);
-  const [featured, newest] = await Promise.all([
+/** Datos de la portada: cacheados en Redis (120 s, invalidados al editar catálogo, banners o promociones). */
+export function getHomeData() {
+  return cached(cacheKey("home"), TTL_HOME, loadHomeData);
+}
+
+async function loadHomeData() {
+  // Se limita la concurrencia (2 tandas de hasta 3 consultas) para no agotar el pool de conexiones.
+  // Los banners (una sola consulta compartida) viajan junto a la primera tanda de productos.
+  const [[hero, promo, collections], featured, newest] = await Promise.all([
+    Promise.all([getBanners("HERO"), getBanners("PROMO"), getBanners("COLLECTION")]),
     cardsFor({ isFeatured: true }, { updatedAt: "desc" }, 8),
     cardsFor({ isNew: true }, { createdAt: "desc" }, 8),
   ]);
@@ -360,13 +394,15 @@ export async function getHomeData() {
   return { hero, promo, collections, featured, newest, best, offers };
 }
 
-export async function getOfferProducts(take = 48) {
+export function getOfferProducts(take = 48) {
   // Ofertas = productos con precio de oferta propio o dentro de una promoción activa
-  const [rows, promos] = await Promise.all([
-    prisma.product.findMany({ where: { status: "ACTIVE" }, orderBy: { createdAt: "desc" }, include: cardInclude }),
-    loadActivePromotions(),
-  ]);
-  return rows.map((r) => toCard(r, promos)).filter((c) => c.compareAt !== null).slice(0, take);
+  return cached(cacheKey("offers", { take }), TTL_LIST, async () => {
+    const [rows, promos] = await Promise.all([
+      prisma.product.findMany({ where: { status: "ACTIVE" }, orderBy: { createdAt: "desc" }, include: cardInclude }),
+      loadActivePromotions(),
+    ]);
+    return rows.map((r) => toCard(r, promos)).filter((c) => c.compareAt !== null).slice(0, take);
+  });
 }
 
 export async function getFavoriteProducts(userId: string) {
@@ -381,12 +417,19 @@ export async function getFavoriteProducts(userId: string) {
   return rows.map((r) => toCard(r.product, promos));
 }
 
+/** Autocompletado. La búsqueda no distingue mayúsculas, así que la clave de caché se normaliza (misma entrada para «Jean» y «jean»). */
 export async function searchSuggestions(q: string) {
-  const term = q.trim().slice(0, 60);
+  const term = q.trim().replace(/\s+/g, " ").slice(0, 60);
   if (term.length < 2) return [];
-  return cardsFor(
-    { OR: [{ name: { contains: term, mode: "insensitive" } }, { category: { name: { contains: term, mode: "insensitive" } } }, { subcategory: { name: { contains: term, mode: "insensitive" } } }] },
-    [{ isBestSeller: "desc" }, { soldCount: "desc" }],
-    6,
+  return cached(
+    cacheKey("search", term.toLowerCase()),
+    TTL_SEARCH,
+    () =>
+      cardsFor(
+        { OR: [{ name: { contains: term, mode: "insensitive" } }, { category: { name: { contains: term, mode: "insensitive" } } }, { subcategory: { name: { contains: term, mode: "insensitive" } } }] },
+        [{ isBestSeller: "desc" }, { soldCount: "desc" }],
+        6,
+      ),
+    (items) => items.length > 0, // los términos sin resultados no se guardan (suelen ser basura o errores de tipeo únicos)
   );
 }

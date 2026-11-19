@@ -9,7 +9,12 @@ import { ProductGrid } from "@/components/products/product-card";
 
 type Props = { params: Promise<{ slug: string }> };
 
+// ISR: cada producto se genera en su primera visita y se sirve desde caché 60 s (se purga al editar el catálogo
+// o al cambiar el stock). `generateStaticParams` vacío activa ese caché sin consultar la base de datos en el build.
 export const revalidate = 60;
+export function generateStaticParams() {
+  return [];
+}
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;

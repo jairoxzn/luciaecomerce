@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { memo, useState, useTransition } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Minus, Plus, Trash2, Repeat } from "lucide-react";
@@ -12,17 +12,27 @@ import { cn, formatPEN } from "@/lib/utils";
 import type { CartLine } from "@/lib/services/cart";
 import { Select } from "@/components/ui/input";
 
-export function CartLineItem({ line, compact = false, readOnly = false }: { line: CartLine; compact?: boolean; readOnly?: boolean }) {
+type Props = { line: CartLine; compact?: boolean; readOnly?: boolean };
+
+// CartLine es plano (solo valores primitivos): si una nueva cotización trae la misma línea sin cambios, no se re-renderiza.
+// (Cambiar la cantidad de un producto ya no repinta los demás del carrito.)
+const sameProps = (a: Props, b: Props) =>
+  a.compact === b.compact && a.readOnly === b.readOnly && (Object.keys(a.line) as (keyof CartLine)[]).every((k) => a.line[k] === b.line[k]);
+
+export const CartLineItem = memo(function CartLineItem({ line, compact = false, readOnly = false }: Props) {
   const setQuantity = useCart((s) => s.setQuantity);
   const remove = useCart((s) => s.remove);
   const changeVariant = useCart((s) => s.changeVariant);
   const closeDrawer = useCart((s) => s.closeDrawer);
+  // Cantidad local: los botones +/− responden al instante; el importe se actualiza cuando llega la cotización del servidor
+  const local = useCart((s) => s.items.find((i) => i.variantId === line.variantId)?.quantity);
   const [options, setOptions] = useState<VariantOption[] | null>(null);
   const [pending, start] = useTransition();
 
   const unavailable = line.issue === "UNAVAILABLE" || line.issue === "OUT_OF_STOCK";
-  const qty = unavailable ? line.requested : line.quantity;
   const max = Math.min(MAX_CART_QTY, line.stock);
+  const qty = unavailable ? line.requested : Math.min(local ?? line.quantity, max);
+  const amountStale = !unavailable && qty !== line.quantity; // el importe mostrado aún es el de la cantidad anterior
 
   function openChange() {
     if (options) return setOptions(null);
@@ -89,7 +99,7 @@ export function CartLineItem({ line, compact = false, readOnly = false }: { line
               </button>
             </div>
           )}
-          <div className="text-right">
+          <div className={cn("text-right transition-opacity", amountStale && "opacity-50")} aria-busy={amountStale}>
             {line.onSale && <p className="text-xs text-stone line-through">{formatPEN((line.regularCents * line.quantity) / 100)}</p>}
             <p className="text-sm font-bold">{unavailable ? "—" : formatPEN(line.lineCents / 100)}</p>
           </div>
@@ -122,4 +132,4 @@ export function CartLineItem({ line, compact = false, readOnly = false }: { line
       </div>
     </li>
   );
-}
+}, sameProps);

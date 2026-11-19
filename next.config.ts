@@ -22,6 +22,8 @@ function s3Pattern() {
   }
 }
 
+const STATIC_CACHE = "public, max-age=2592000, stale-while-revalidate=604800";
+
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
@@ -60,7 +62,13 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: "2mb" },
   },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      // Estáticos de /public: el navegador y la CDN los reutilizan 30 días y los revalidan en segundo plano una semana más.
+      // (No son «immutable» porque conservan el mismo nombre: si reemplazas una imagen, renómbrala o espera a que expire.)
+      { source: "/demo/:path*", headers: [{ key: "Cache-Control", value: STATIC_CACHE }] },
+      { source: "/brand/:path*", headers: [{ key: "Cache-Control", value: STATIC_CACHE }] },
+    ];
   },
 };
 

@@ -6,7 +6,8 @@ import { ContactForm } from "@/components/store/contact-form";
 import { FacebookIcon, InstagramIcon, TikTokIcon, WhatsAppIcon } from "@/components/ui/social-icons";
 
 export const metadata: Metadata = { title: "Contacto", description: "Estamos para ayudarte. Escríbenos o visítanos.", alternates: { canonical: "/contacto" } };
-export const revalidate = 300;
+// Se renderiza en cada petición (los datos salen de la caché de Redis): el build no consulta la base de datos
+export const dynamic = "force-dynamic";
 
 export default async function ContactPage() {
   const s = await getSettings();

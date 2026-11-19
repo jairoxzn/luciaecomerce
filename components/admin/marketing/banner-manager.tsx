@@ -7,6 +7,7 @@ import { Controller, useForm } from "react-hook-form";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteBannerAction, saveBannerAction } from "@/app/admin/actions/marketing";
+import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field, Input, Select, Switch } from "@/components/ui/input";
@@ -20,11 +21,11 @@ type F = { id?: string; title: string; subtitle: string; ctaLabel: string; ctaHr
 const POS = { HERO: "Principal (carrusel)", PROMO: "Franja promocional", COLLECTION: "Colección" } as const;
 const toDate = (s: string | null) => (s ? limaDateKey(new Date(s)) : "");
 
-export function BannerManager({ banners }: { banners: BannerRow[] }) {
+export function BannerManager({ banners: serverBanners }: { banners: BannerRow[] }) {
   const router = useRouter();
+  const { rows: banners, mutate } = useOptimisticRows(serverBanners); // los cambios se ven al instante
   const [editing, setEditing] = useState<F | null>(null);
   const [del, setDel] = useState<BannerRow | null>(null);
-  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Record<string, string[]> | null>(null);
   const { register, control, handleSubmit, reset, formState: { isSubmitting } } = useForm<F>();
 
@@ -74,7 +75,7 @@ export function BannerManager({ banners }: { banners: BannerRow[] }) {
           <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setEditing(null)}>Cancelar</Button><Button type="submit" loading={isSubmitting}>Guardar</Button></div>
         </form>
       </Modal>
-      <ConfirmDialog open={!!del} onClose={() => setDel(null)} loading={busy} danger title={`¿Eliminar "${del?.title}"?`} confirmLabel="Eliminar" onConfirm={async () => { if (!del) return; setBusy(true); const r = await deleteBannerAction(del.id); setBusy(false); if (!r.ok) return toast.error(r.error); toast.success(r.message); setDel(null); router.refresh(); }} />
+      <ConfirmDialog open={!!del} onClose={() => setDel(null)} danger title={`¿Eliminar "${del?.title}"?`} confirmLabel="Eliminar" onConfirm={() => { if (!del) return; const d = del; setDel(null); mutate({ id: d.id, remove: true }, () => deleteBannerAction(d.id)); }} />
     </>
   );
 }

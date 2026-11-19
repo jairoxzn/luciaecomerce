@@ -6,6 +6,7 @@ import { Controller, useForm } from "react-hook-form";
 import { Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deletePromotionAction, savePromotionAction, togglePromotionAction } from "@/app/admin/actions/marketing";
+import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field, Input, Select, Switch } from "@/components/ui/input";
@@ -25,11 +26,11 @@ function status(p: PromotionRow) {
   return ["En curso", "bg-green-50 text-green-700 ring-green-200"];
 }
 
-export function PromotionManager({ promotions, categories }: { promotions: PromotionRow[]; categories: { id: string; name: string }[] }) {
+export function PromotionManager({ promotions: serverPromotions, categories }: { promotions: PromotionRow[]; categories: { id: string; name: string }[] }) {
   const router = useRouter();
+  const { rows: promotions, mutate } = useOptimisticRows(serverPromotions); // los cambios se ven al instante
   const [editing, setEditing] = useState<F | null>(null);
   const [del, setDel] = useState<PromotionRow | null>(null);
-  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<Record<string, string[]> | null>(null);
   const { register, control, handleSubmit, reset, watch, formState: { isSubmitting } } = useForm<F>();
   const type = watch("discountType");
@@ -58,7 +59,7 @@ export function PromotionManager({ promotions, categories }: { promotions: Promo
                   <Td><Badge className={cls}>{label}</Badge></Td>
                   <Td className="text-right"><div className="flex justify-end gap-1">
                     <Button size="sm" variant="ghost" onClick={() => open(p)} aria-label="Editar"><Pencil className="h-3.5 w-3.5" /></Button>
-                    <Button size="sm" variant="ghost" onClick={async () => { const r = await togglePromotionAction(p.id); r.ok ? (toast.success(r.message), router.refresh()) : toast.error(r.error); }} aria-label="Activar o desactivar"><Power className={cn("h-3.5 w-3.5", p.isActive ? "text-green-600" : "text-stone")} /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => mutate({ id: p.id, changes: { isActive: !p.isActive } }, () => togglePromotionAction(p.id))} aria-label="Activar o desactivar"><Power className={cn("h-3.5 w-3.5", p.isActive ? "text-green-600" : "text-stone")} /></Button>
                     <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 hover:text-red-600" onClick={() => setDel(p)} aria-label="Eliminar"><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div></Td>
                 </tr>
@@ -87,7 +88,7 @@ export function PromotionManager({ promotions, categories }: { promotions: Promo
           <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setEditing(null)}>Cancelar</Button><Button type="submit" loading={isSubmitting}>Guardar</Button></div>
         </form>
       </Modal>
-      <ConfirmDialog open={!!del} onClose={() => setDel(null)} loading={busy} danger title={`¿Eliminar "${del?.name}"?`} confirmLabel="Eliminar" onConfirm={async () => { if (!del) return; setBusy(true); const r = await deletePromotionAction(del.id); setBusy(false); if (!r.ok) return toast.error(r.error); toast.success(r.message); setDel(null); router.refresh(); }} />
+      <ConfirmDialog open={!!del} onClose={() => setDel(null)} danger title={`¿Eliminar "${del?.name}"?`} confirmLabel="Eliminar" onConfirm={() => { if (!del) return; const d = del; setDel(null); mutate({ id: d.id, remove: true }, () => deletePromotionAction(d.id)); }} />
     </>
   );
 }

@@ -12,14 +12,29 @@ services:
     image: lucia-jeans:latest
     restart: unless-stopped
     env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
     environment:
       NODE_ENV: production
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379} # caché compartida (opcional: sin Redis la tienda funciona igual)
       UPLOAD_DIR: /app/storage
       RUN_MIGRATIONS: "true" # aplica migraciones pendientes en cada despliegue
     ports:
       - "3000:3000"
     volumes:
       - lucia_storage:/app/storage # imágenes y comprobantes (si STORAGE_DRIVER=local)
+
+  # Caché de los datos más consultados (catálogo, ajustes, búsquedas). Es solo caché: se puede reiniciar sin perder datos.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   tools:
     profiles: ["tools"]

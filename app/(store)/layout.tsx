@@ -1,6 +1,5 @@
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "@/lib/auth/session";
 import { getNavCategories } from "@/lib/services/catalog";
 import { getSettings, SETTINGS_TAG } from "@/lib/services/settings";
 import { formatPEN } from "@/lib/utils";
@@ -16,24 +15,21 @@ const getAnnouncement = unstable_cache(async () => {
   return `Envío gratis en ${zone.name} desde ${formatPEN(Number(zone.freeShippingFrom))} · Envíos a todo el Perú`;
 }, ["store-announcement"], { tags: [SETTINGS_TAG], revalidate: 300 });
 
+/**
+ * Este layout NO lee cookies ni datos del usuario: así las páginas públicas (producto, políticas…) pueden
+ * generarse una vez y servirse desde caché (ISR). La sesión y los favoritos los carga `CartSync` en el navegador.
+ */
 export default async function StoreLayout({ children }: { children: React.ReactNode }) {
-  const [settings, categories, user, announcement] = await Promise.all([getSettings(), getNavCategories(), getCurrentUser(), getAnnouncement()]);
-  const favoriteIds = user ? (await prisma.favorite.findMany({ where: { userId: user.id }, select: { productId: true } })).map((f) => f.productId) : [];
+  const [settings, categories, announcement] = await Promise.all([getSettings(), getNavCategories(), getAnnouncement()]);
 
   return (
     <>
-      <SiteHeader
-        storeName={settings.storeName}
-        logoUrl={settings.logoUrl}
-        categories={categories}
-        user={user ? { name: user.name, role: user.role } : null}
-        announcement={announcement}
-      />
+      <SiteHeader storeName={settings.storeName} logoUrl={settings.logoUrl} categories={categories} announcement={announcement} />
       <main id="contenido">{children}</main>
       <SiteFooter settings={settings} categories={categories} />
       <WhatsAppFloat phone={settings.whatsapp} storeName={settings.storeName} />
       <CartDrawer />
-      <CartSync authenticated={!!user} userId={user?.id ?? null} favoriteIds={favoriteIds} />
+      <CartSync />
     </>
   );
 }

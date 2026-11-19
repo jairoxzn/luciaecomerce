@@ -3,15 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
-import { Copy, ExternalLink, Eye, Link2, Pencil, Plus, Power, RefreshCw, Search, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, Eye, Link2, Pencil, Plus, Power, RefreshCw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteShareCatalogAction, regenerateShareLinkAction, saveShareCatalogAction, toggleShareCatalogAction } from "@/app/admin/actions/share-catalogs";
 import { Badge } from "@/components/ui/badge";
+import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Switch, Textarea } from "@/components/ui/input";
 import { ConfirmDialog, Modal } from "@/components/ui/modal";
 import { WhatsAppIcon } from "@/components/ui/social-icons";
 import { Card } from "@/components/admin/ui";
+import { ProductPicker } from "./product-picker";
 import { shareStatus, shareWhatsAppText } from "@/lib/share-catalog-core";
 import { cn, formatDate, limaDateKey, pluralize } from "@/lib/utils";
 
@@ -35,15 +37,15 @@ const scopeLabel = (c: ShareCatalogRow, cats: Map<string, string>) =>
     : c.categoryIds.length ? c.categoryIds.map((id) => cats.get(id)).filter(Boolean).join(", ") || "Categorías"
       : "Todo el catálogo";
 
-export function ShareCatalogManager({ catalogs, categories, products, storeName }: { catalogs: ShareCatalogRow[]; categories: { id: string; name: string }[]; products: Product[]; storeName: string }) {
+export function ShareCatalogManager({ catalogs: serverCatalogs, categories, products, storeName }: { catalogs: ShareCatalogRow[]; categories: { id: string; name: string }[]; products: Product[]; storeName: string }) {
   const router = useRouter();
+  const { rows: catalogs, mutate } = useOptimisticRows(serverCatalogs); // los cambios se ven al instante
   const [origin, setOrigin] = useState("");
   const [editing, setEditing] = useState<{ id?: string } | null>(null);
   const [del, setDel] = useState<ShareCatalogRow | null>(null);
   const [renew, setRenew] = useState<ShareCatalogRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Record<string, string[]> | null>(null);
-  const [search, setSearch] = useState("");
   const { register, control, handleSubmit, reset, watch, formState: { isSubmitting } } = useForm<F>();
   const scope = watch("scope");
   const catNames = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories]);
@@ -56,7 +58,7 @@ export function ShareCatalogManager({ catalogs, categories, products, storeName 
     reset(c
       ? { title: c.title, message: c.message ?? "", scope: scopeOf(c), categoryIds: c.categoryIds, productIds: c.productIds, showPrices: c.showPrices, onlyInStock: c.onlyInStock, isActive: c.isActive, expiresAt: c.expiresAt ? limaDateKey(new Date(c.expiresAt)) : "" }
       : { title: "", message: "", scope: "all", categoryIds: [], productIds: [], showPrices: true, onlyInStock: false, isActive: true, expiresAt: "" });
-    setSearch(""); setError(null); setEditing({ id: c?.id });
+    setError(null); setEditing({ id: c?.id });
   };
 
   const copy = async (c: ShareCatalogRow) => {
@@ -64,10 +66,7 @@ export function ShareCatalogManager({ catalogs, categories, products, storeName 
     catch { toast.error("No se pudo copiar. Selecciona el enlace y cópialo manualmente."); }
   };
   const whatsapp = (c: ShareCatalogRow) => window.open(`https://wa.me/?text=${encodeURIComponent(shareWhatsAppText(c.title, urlOf(c), storeName))}`, "_blank", "noopener,noreferrer");
-  const act = async (fn: () => ReturnType<typeof toggleShareCatalogAction>) => { const r = await fn(); if (!r.ok) return toast.error(r.error); toast.success(r.message); router.refresh(); };
 
-  const q = search.trim().toLowerCase();
-  const visible = q ? products.filter((p) => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.category.toLowerCase().includes(q)) : products;
 
   return (
     <>
@@ -107,7 +106,7 @@ export function ShareCatalogManager({ catalogs, categories, products, storeName 
                     <Button size="sm" className="bg-[#25D366] text-white shadow-none hover:bg-[#1ebe5b]" onClick={() => whatsapp(c)} disabled={st !== "active"}><WhatsAppIcon className="h-4 w-4" /> WhatsApp</Button>
                     <Button size="sm" variant="ghost" onClick={() => window.open(`/c/${c.token}`, "_blank", "noopener,noreferrer")} aria-label="Ver catálogo" title="Ver catálogo"><ExternalLink className="h-3.5 w-3.5" /></Button>
                     <Button size="sm" variant="ghost" onClick={() => open(c)} aria-label="Editar" title="Editar"><Pencil className="h-3.5 w-3.5" /></Button>
-                    <Button size="sm" variant="ghost" onClick={() => act(() => toggleShareCatalogAction(c.id))} aria-label={c.isActive ? "Desactivar" : "Activar"} title={c.isActive ? "Desactivar" : "Activar"}><Power className={cn("h-3.5 w-3.5", c.isActive ? "text-green-600" : "text-stone")} /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => mutate({ id: c.id, changes: { isActive: !c.isActive } }, () => toggleShareCatalogAction(c.id))} aria-label={c.isActive ? "Desactivar" : "Activar"} title={c.isActive ? "Desactivar" : "Activar"}><Power className={cn("h-3.5 w-3.5", c.isActive ? "text-green-600" : "text-stone")} /></Button>
                     <Button size="sm" variant="ghost" onClick={() => setRenew(c)} aria-label="Renovar enlace" title="Renovar enlace"><RefreshCw className="h-3.5 w-3.5" /></Button>
                     <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 hover:text-red-600" onClick={() => setDel(c)} aria-label="Eliminar" title="Eliminar"><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div>
@@ -157,35 +156,9 @@ export function ShareCatalogManager({ catalogs, categories, products, storeName 
           )}
 
           {scope === "products" && (
-            <Controller control={control} name="productIds" render={({ field }) => {
-              const sel = new Set(field.value ?? []);
-              const toggle = (id: string) => field.onChange(sel.has(id) ? field.value.filter((x) => x !== id) : [...(field.value ?? []), id]);
-              return (
-                <div>
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <div className="relative min-w-0 flex-1">
-                      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
-                      <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por nombre, SKU o categoría…" className="h-10 pl-10" aria-label="Buscar productos" />
-                    </div>
-                    <Button size="sm" variant="outline" onClick={() => field.onChange([...new Set([...(field.value ?? []), ...visible.map((p) => p.id)])])}>Marcar visibles</Button>
-                    <Button size="sm" variant="ghost" onClick={() => field.onChange([])}>Limpiar</Button>
-                  </div>
-                  <p className="mb-2 text-xs text-stone">{sel.size} {pluralize(sel.size, "producto elegido", "productos elegidos")} (máx. 300)</p>
-                  <ul className="max-h-64 divide-y divide-neutral-100 overflow-y-auto rounded-xl border border-neutral-200">
-                    {visible.length === 0 && <li className="px-4 py-6 text-center text-sm text-stone">No hay productos que coincidan.</li>}
-                    {visible.map((p) => (
-                      <li key={p.id}>
-                        <label className="flex cursor-pointer items-center gap-3 px-3.5 py-2.5 hover:bg-brand-tint/30">
-                          <input type="checkbox" checked={sel.has(p.id)} onChange={() => toggle(p.id)} className="h-4 w-4 accent-[#E65385]" />
-                          <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{p.name}</span><span className="block truncate text-xs text-stone">{p.category} · {p.sku}</span></span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                  {error?.productIds?.[0] && <p role="alert" className="mt-1.5 text-xs font-medium text-red-600">{error.productIds[0]}</p>}
-                </div>
-              );
-            }} />
+            <Controller control={control} name="productIds" render={({ field }) => (
+              <ProductPicker products={products} value={field.value ?? []} onChange={field.onChange} error={error?.productIds?.[0]} />
+            )} />
           )}
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -202,8 +175,8 @@ export function ShareCatalogManager({ catalogs, categories, products, storeName 
 
       <ConfirmDialog open={!!renew} onClose={() => setRenew(null)} loading={busy} title="¿Renovar el enlace?" description="Se generará una dirección nueva. El enlace que ya compartiste dejará de funcionar y tendrás que enviar el nuevo." confirmLabel="Renovar enlace"
         onConfirm={async () => { if (!renew) return; setBusy(true); const r = await regenerateShareLinkAction(renew.id); setBusy(false); if (!r.ok) return toast.error(r.error); toast.success(r.message); setRenew(null); router.refresh(); }} />
-      <ConfirmDialog open={!!del} onClose={() => setDel(null)} loading={busy} danger title={`¿Eliminar «${del?.title}»?`} description="El enlace dejará de funcionar para todos los clientes. Tus productos no se modifican." confirmLabel="Eliminar"
-        onConfirm={async () => { if (!del) return; setBusy(true); const r = await deleteShareCatalogAction(del.id); setBusy(false); if (!r.ok) return toast.error(r.error); toast.success(r.message); setDel(null); router.refresh(); }} />
+      <ConfirmDialog open={!!del} onClose={() => setDel(null)} danger title={`¿Eliminar «${del?.title}»?`} description="El enlace dejará de funcionar para todos los clientes. Tus productos no se modifican." confirmLabel="Eliminar"
+        onConfirm={() => { if (!del) return; const d = del; setDel(null); mutate({ id: d.id, remove: true }, () => deleteShareCatalogAction(d.id)); }} />
     </>
   );
 }

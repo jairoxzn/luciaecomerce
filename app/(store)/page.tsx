@@ -11,7 +11,8 @@ import { Benefits } from "@/components/store/benefits";
 import { ProductGrid } from "@/components/products/product-card";
 import { FacebookIcon, InstagramIcon, TikTokIcon, WhatsAppIcon } from "@/components/ui/social-icons";
 
-export const revalidate = 120;
+// Se renderiza en cada petición (los datos salen de la caché de Redis): el build no consulta la base de datos
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const [data, categories, settings, zones] = await Promise.all([

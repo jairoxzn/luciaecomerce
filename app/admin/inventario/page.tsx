@@ -27,11 +27,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
   const base: Prisma.ProductVariantWhereInput = { product: { status: { not: "ARCHIVED" } }, ...(q ? { OR: [{ sku: { contains: q, mode: "insensitive" } }, { product: { name: { contains: q, mode: "insensitive" } } }] } : {}) };
 
-  const [lowIds, outCount] = await Promise.all([
+  // Los tres contadores de las pestañas son independientes: una sola ronda de consultas
+  const [lowIds, outCount, totalVariants] = await Promise.all([
     prisma.$queryRaw<{ id: string }[]>`SELECT v."id" FROM "ProductVariant" v JOIN "Product" p ON p."id" = v."productId" WHERE v."isActive" = true AND p."status" <> 'ARCHIVED' AND v."stock" <= v."minStock"`,
     prisma.productVariant.count({ where: { isActive: true, stock: 0, product: { status: { not: "ARCHIVED" } } } }),
+    prisma.productVariant.count({ where: { product: { status: { not: "ARCHIVED" } } } }),
   ]);
-  const totalVariants = await prisma.productVariant.count({ where: { product: { status: { not: "ARCHIVED" } } } });
 
   const tabsView = (
     <div className="mb-4 flex gap-2">

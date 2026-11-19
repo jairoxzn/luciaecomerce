@@ -156,9 +156,24 @@ export type QuoteOptions = {
   delivery?: { method: "DELIVERY" | "PICKUP"; department?: string | null } | null;
 };
 
+type Settled<T> = { ok: true; value: T } | { ok: false; error: unknown };
+
+/** Convierte una promesa en resultado: permite lanzarla en paralelo y decidir después (como antes) si su error importa. */
+const settle = <T>(p: Promise<T>): Promise<Settled<T>> => p.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+function unwrap<T>(s: Settled<T>): T {
+  if (!s.ok) throw s.error;
+  return s.value;
+}
+
 /** Cotización completa calculada en servidor: nunca se confía en importes del cliente. */
 export async function buildQuote(items: CartItemInput[], opts: QuoteOptions = {}, db: Db = prisma): Promise<Quote> {
-  const lines = await resolveLines(items, db);
+  // Líneas, cupón y datos de envío son independientes entre sí: se piden en paralelo.
+  // (Si el cupón o el envío fallan, el error se resuelve más abajo con la misma lógica de siempre.)
+  const [lines, couponLoad, shippingLoad] = await Promise.all([
+    resolveLines(items, db),
+    opts.couponCode?.trim() ? settle(loadCoupon(opts.couponCode, db)) : null,
+    opts.delivery ? settle(Promise.all([getSettings(), loadZones(db)])) : null,
+  ]);
   const active = lines.filter((l) => l.quantity > 0);
   const subtotalCents = active.reduce((s, l) => s + l.lineCents, 0);
 
@@ -166,9 +181,9 @@ export async function buildQuote(items: CartItemInput[], opts: QuoteOptions = {}
   let couponId: string | null = null;
   let couponCode: string | null = null;
   let couponError: string | null = null;
-  if (opts.couponCode?.trim()) {
+  if (couponLoad) {
     try {
-      const coupon = await loadCoupon(opts.couponCode, db);
+      const coupon = unwrap(couponLoad);
       if (!coupon) throw new CouponError("El cupón ingresado no existe.");
       discountCents = evaluateCoupon(coupon, active.map((l) => ({ categoryId: l.categoryId, lineCents: l.lineCents })));
       couponId = coupon.id;
@@ -183,14 +198,14 @@ export async function buildQuote(items: CartItemInput[], opts: QuoteOptions = {}
   let shippingError: string | null = null;
   let shippingZoneName: string | null = null;
   let freeShipping = false;
-  if (opts.delivery && active.length) {
+  if (opts.delivery && shippingLoad && active.length) {
     try {
-      const settings = await getSettings();
+      const [settings, zones] = unwrap(shippingLoad);
       const s = computeShipping({
         method: opts.delivery.method,
         department: opts.delivery.department,
         afterDiscountCents: subtotalCents - discountCents,
-        zones: await loadZones(db),
+        zones,
         pickupPrice: settings.pickupPrice,
         pickupEnabled: settings.pickupEnabled,
       });

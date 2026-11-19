@@ -10,6 +10,7 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { addressSchema, type AddressInput } from "@/lib/validations/auth";
 import { emailField, nameField } from "@/lib/validations/common";
 import { cancelOwnOrder } from "@/lib/services/orders";
+import { refreshStock } from "@/lib/revalidate";
 
 // ───────────── Favoritos ─────────────
 
@@ -100,6 +101,7 @@ export async function cancelMyOrderAction(orderId: string): Promise<ActionResult
   return run(async () => {
     const me = await assertUser();
     await cancelOwnOrder(orderId, me.id);
+    refreshStock(); // el stock devuelto vuelve a estar disponible
     revalidatePath("/mi-cuenta/pedidos");
     return { ok: true, message: "Pedido cancelado." };
   });

@@ -27,7 +27,8 @@ RUN npm ci
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-# El build no consulta la base de datos (las páginas son dinámicas). sharp y next/image se incluyen en standalone.
+# El build NO consulta la base de datos: las páginas con parámetros (producto, políticas) se generan bajo demanda (ISR)
+# y el resto son dinámicas. sharp y next/image se incluyen en standalone.
 RUN npm run build
 
 # ---------- Herramientas: migraciones y seed (docker compose run --rm tools) ----------

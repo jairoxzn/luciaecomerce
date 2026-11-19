@@ -3,22 +3,25 @@
 import { useEffect, useRef } from "react";
 import { loadServerCartAction, mergeServerCartAction, saveServerCartAction } from "@/app/actions/cart";
 import { useCart } from "@/hooks/use-cart";
-import { useFavorites } from "@/hooks/use-favorites";
+import { useDebouncedCallback } from "@/hooks/use-debounce";
+import { useSession } from "@/hooks/use-session";
 
 /**
- * - Inicializa favoritos del cliente autenticado.
+ * - Carga la sesión y los favoritos del visitante (el layout ya no lee cookies, para permitir caché de páginas).
  * - Con sesión: fusiona el carrito local con el de la cuenta y lo mantiene guardado en la base de datos.
  * - Sin sesión: el carrito vive en el navegador (localStorage).
  */
-export function CartSync({ authenticated, userId, favoriteIds }: { authenticated: boolean; userId: string | null; favoriteIds: string[] }) {
+export function CartSync() {
   const hydrated = useCart((s) => s.hydrated);
   const items = useCart((s) => s.items);
+  const userId = useSession((s) => s.user?.id ?? null);
+  const authenticated = userId !== null;
   const syncedFor = useRef<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Una consulta de sesión al montar la tienda
   useEffect(() => {
-    useFavorites.getState().init(favoriteIds, authenticated);
-  }, [authenticated, favoriteIds]);
+    void useSession.getState().refresh();
+  }, []);
 
   // Fusión inicial al detectar sesión
   useEffect(() => {
@@ -36,23 +39,21 @@ export function CartSync({ authenticated, userId, favoriteIds }: { authenticated
     })();
   }, [hydrated, authenticated, userId]);
 
-  // Persistencia en servidor (debounce)
+  // Persistencia en servidor (debounce de 800 ms; siempre guarda la última versión del carrito)
+  const save = useDebouncedCallback((list: typeof items) => void saveServerCartAction(list), 800);
   useEffect(() => {
     if (!hydrated || !authenticated || syncedFor.current !== userId) return;
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => void saveServerCartAction(items), 800);
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [items, hydrated, authenticated, userId]);
+    save(items);
+  }, [items, hydrated, authenticated, userId, save]);
 
   // Al cerrar sesión se limpia el carrito local (equipos compartidos)
   useEffect(() => {
     if (hydrated && !authenticated && syncedFor.current) {
       syncedFor.current = null;
+      save.cancel();
       useCart.getState().clear();
     }
-  }, [authenticated, hydrated]);
+  }, [authenticated, hydrated, save]);
 
   return null;
 }

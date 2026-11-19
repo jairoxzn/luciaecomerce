@@ -9,7 +9,11 @@ const PAGES: Record<string, { title: string; field: keyof Settings }> = {
   terminos: { title: "Términos y condiciones", field: "termsAndConditions" },
 };
 
+// ISR: se genera en la primera visita y se sirve desde caché (se purga al guardar la configuración)
 export const revalidate = 300;
+export function generateStaticParams() {
+  return [];
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;

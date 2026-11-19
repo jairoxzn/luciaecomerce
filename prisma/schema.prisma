@@ -275,10 +275,12 @@ model Product {
   favorites   Favorite[]
 
   @@index([status, createdAt])
-  @@index([categoryId, status])
+  @@index([status, soldCount])
+  @@index([status, isFeatured, updatedAt])
+  @@index([status, isNew, createdAt])
+  @@index([status, isBestSeller, soldCount])
+  @@index([categoryId, status, createdAt])
   @@index([subcategoryId])
-  @@index([isFeatured])
-  @@index([isBestSeller])
   @@index([isDemo])
 }
 
@@ -295,6 +297,7 @@ model ProductImage {
   color   Color?  @relation(fields: [colorId], references: [id], onDelete: SetNull)
 
   @@index([productId, sortOrder])
+  @@index([colorId])
 }
 
 model ProductVariant {
@@ -318,7 +321,9 @@ model ProductVariant {
   orderItems OrderItem[]
 
   @@unique([productId, sizeId, colorId])
-  @@index([productId])
+  @@index([productId, isActive])
+  @@index([sizeId])
+  @@index([colorId])
   @@index([stock])
 }
 
@@ -367,6 +372,7 @@ model CartItem {
   variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
 
   @@unique([cartId, variantId])
+  @@index([variantId])
 }
 
 model Favorite {
@@ -432,6 +438,7 @@ model Order {
   @@index([status, createdAt])
   @@index([email])
   @@index([createdAt])
+  @@index([couponId])
 }
 
 model OrderItem {
@@ -710,6 +717,7 @@ model ContactMessage {
   createdAt DateTime  @default(now())
 
   @@index([createdAt])
+  @@index([readAt])
 }
 
 model RateLimit {

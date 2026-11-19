@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { grantGuestAccess } from "@/lib/auth/order-access";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { createOrder } from "@/lib/services/orders";
+import { refreshStock } from "@/lib/revalidate";
 import { placeOrderSchema, type PlaceOrderFormInput } from "@/lib/validations/checkout";
 import { emailField } from "@/lib/validations/common";
 
@@ -19,6 +20,7 @@ export async function placeOrderAction(raw: PlaceOrderFormInput): Promise<Action
     const input = placeOrderSchema.parse(raw);
     const { code } = await createOrder(input, user?.id ?? null);
     if (!user) await grantGuestAccess(code);
+    refreshStock(); // el stock bajó: las páginas de producto en caché deben reflejarlo
     return { ok: true, data: { code } };
   });
 }

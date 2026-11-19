@@ -6,6 +6,7 @@ import { Heart, LogOut, MapPin, Package, Ticket, User } from "lucide-react";
 import { toast } from "sonner";
 import { logoutAction } from "@/app/actions/auth";
 import { useCart } from "@/hooks/use-cart";
+import { useSession } from "@/hooks/use-session";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -33,6 +34,7 @@ export function AccountNav() {
         onClick={async () => {
           await logoutAction();
           useCart.getState().clear();
+          useSession.getState().clear();
           toast.success("Sesión cerrada");
           router.push("/");
           router.refresh();

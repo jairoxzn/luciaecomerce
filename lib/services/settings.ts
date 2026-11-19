@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { cached, cacheKey, invalidateInBackground } from "@/lib/cache";
 import { num } from "@/lib/utils";
 
 export type SizeGuideSection = { title: string; headers: string[]; rows: string[][] };
@@ -49,17 +50,18 @@ export type Settings = {
 export const SETTINGS_TAG = "settings";
 
 const loadSettings = unstable_cache(
-  async (): Promise<Settings> => {
-    const row = await prisma.storeSettings.upsert({ where: { id: "main" }, update: {}, create: { id: "main" } });
-    const { id: _id, updatedAt: _u, pickupPrice, sizeGuide, ...rest } = row;
-    void _id;
-    void _u;
-    return {
-      ...rest,
-      pickupPrice: num(pickupPrice),
-      sizeGuide: Array.isArray(sizeGuide) ? (sizeGuide as SizeGuideSection[]) : [],
-    };
-  },
+  () =>
+    cached(cacheKey("settings"), 300, async (): Promise<Settings> => {
+      const row = await prisma.storeSettings.upsert({ where: { id: "main" }, update: {}, create: { id: "main" } });
+      const { id: _id, updatedAt: _u, pickupPrice, sizeGuide, ...rest } = row;
+      void _id;
+      void _u;
+      return {
+        ...rest,
+        pickupPrice: num(pickupPrice),
+        sizeGuide: Array.isArray(sizeGuide) ? (sizeGuide as SizeGuideSection[]) : [],
+      };
+    }),
   ["store-settings"],
   { tags: [SETTINGS_TAG], revalidate: 300 },
 );
@@ -69,6 +71,7 @@ export const getSettings = cache(() => loadSettings());
 
 export function revalidateSettings() {
   revalidateTag(SETTINGS_TAG);
+  invalidateInBackground("settings");
 }
 
 /** Métodos de pago habilitados con su configuración (sin exponer nada sensible: son datos para el cliente). */

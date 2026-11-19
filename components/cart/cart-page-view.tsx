@@ -11,7 +11,7 @@ import { CartSummary } from "./cart-summary";
 import { CouponBox } from "./coupon-box";
 
 export function CartPageView() {
-  const { quote, loading, empty, hydrated } = useCartQuote();
+  const { quote, lines, loading, empty, hydrated } = useCartQuote();
 
   if (!hydrated || (!quote && !empty)) {
     return (
@@ -39,7 +39,7 @@ export function CartPageView() {
   return (
     <div className="grid items-start gap-8 lg:grid-cols-[1fr_380px]">
       <ul className="space-y-3">
-        {quote.lines.map((l) => (
+        {(lines ?? quote.lines).map((l) => (
           <CartLineItem key={l.variantId} line={l} />
         ))}
       </ul>

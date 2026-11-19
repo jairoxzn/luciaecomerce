@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
+import { useSession } from "@/hooks/use-session";
 import { loginAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
@@ -29,6 +30,7 @@ export function LoginForm({ next }: { next?: string }) {
           return toast.error(res.error);
         }
         toast.success(res.message ?? "Bienvenida");
+        void useSession.getState().refresh(); // el header y los favoritos se actualizan sin recargar
         router.push(res.data!.redirectTo);
         router.refresh();
       })}

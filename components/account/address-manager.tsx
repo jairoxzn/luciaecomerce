@@ -7,6 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { MapPin, Pencil, Plus, Star, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { deleteAddressAction, saveAddressAction, setDefaultAddressAction } from "@/app/actions/account";
+import { useOptimisticRows } from "@/hooks/use-optimistic-rows";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/input";
 import { ConfirmDialog, Modal } from "@/components/ui/modal";
@@ -17,11 +18,11 @@ import type { SavedAddress } from "@/components/checkout/types";
 
 const empty: AddressInput = { label: "Casa", recipient: "", phone: "", department: "", province: "", district: "", line: "", reference: "", isDefault: false };
 
-export function AddressManager({ addresses, defaults }: { addresses: SavedAddress[]; defaults: { recipient: string; phone: string } }) {
+export function AddressManager({ addresses: serverAddresses, defaults }: { addresses: SavedAddress[]; defaults: { recipient: string; phone: string } }) {
   const router = useRouter();
+  const { rows: addresses, mutate } = useOptimisticRows(serverAddresses); // los cambios se ven al instante
   const [editing, setEditing] = useState<AddressInput | null>(null);
   const [toDelete, setToDelete] = useState<SavedAddress | null>(null);
-  const [busy, setBusy] = useState(false);
   const form = useForm<AddressInput>({ resolver: zodResolver(addressSchema) as never, defaultValues: empty });
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = form;
 
@@ -53,7 +54,7 @@ export function AddressManager({ addresses, defaults }: { addresses: SavedAddres
               {a.reference && <p className="text-xs text-stone">Ref.: {a.reference}</p>}
               <div className="mt-4 flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => open(a)}><Pencil className="h-3.5 w-3.5" /> Editar</Button>
-                {!a.isDefault && <Button size="sm" variant="soft" onClick={async () => { const r = await setDefaultAddressAction(a.id); r.ok ? (toast.success("Dirección principal actualizada"), router.refresh()) : toast.error(r.error); }}>Hacer principal</Button>}
+                {!a.isDefault && <Button size="sm" variant="soft" onClick={() => mutate({ id: a.id, changes: { isDefault: true }, others: { isDefault: false } }, () => setDefaultAddressAction(a.id), "Dirección principal actualizada")}>Hacer principal</Button>}
                 <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 hover:text-red-600" onClick={() => setToDelete(a)}><Trash2 className="h-3.5 w-3.5" /> Eliminar</Button>
               </div>
             </article>
@@ -91,20 +92,15 @@ export function AddressManager({ addresses, defaults }: { addresses: SavedAddres
       <ConfirmDialog
         open={!!toDelete}
         onClose={() => setToDelete(null)}
-        loading={busy}
         danger
         title="¿Eliminar esta dirección?"
         description={toDelete ? `${toDelete.label} · ${toDelete.line}` : undefined}
         confirmLabel="Eliminar"
-        onConfirm={async () => {
+        onConfirm={() => {
           if (!toDelete) return;
-          setBusy(true);
-          const r = await deleteAddressAction(toDelete.id);
-          setBusy(false);
-          if (!r.ok) return toast.error(r.error);
-          toast.success(r.message ?? "Eliminada");
+          const d = toDelete;
           setToDelete(null);
-          router.refresh();
+          mutate({ id: d.id, remove: true }, () => deleteAddressAction(d.id), "Dirección eliminada");
         }}
       />
     </div>

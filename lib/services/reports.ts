@@ -101,6 +101,15 @@ export async function lowStockVariants(limit = 200) {
   return rows;
 }
 
+/** Cantidad de variantes con stock bajo (COUNT en la base de datos: no trae filas solo para contarlas). */
+export async function lowStockCount() {
+  const rows = await prisma.$queryRaw<{ n: bigint }[]>`
+    SELECT COUNT(*) AS n
+      FROM "ProductVariant" v JOIN "Product" p ON p."id" = v."productId"
+     WHERE v."isActive" = true AND p."status" = 'ACTIVE' AND v."stock" <= v."minStock"`;
+  return Number(rows[0]?.n ?? 0);
+}
+
 export async function inventoryReport() {
   const rows = await prisma.productVariant.findMany({
     where: { product: { status: { not: "ARCHIVED" } } },
@@ -121,7 +130,7 @@ export async function dashboardData() {
 
   const sumPaid = (from?: Date) => prisma.order.aggregate({ _sum: { total: true }, _count: { _all: true }, where: { status: { in: PAID_STATUSES }, ...(from ? { createdAt: { gte: from } } : {}) } });
 
-  const [salesToday, salesMonth, revenue, pending, delivered, customers, activeProducts, low, daily, monthly, top, byCategory, byStatus, recent] = await Promise.all([
+  const [salesToday, salesMonth, revenue, pending, delivered, customers, activeProducts, low, lowTotal, daily, monthly, top, byCategory, byStatus, recent] = await Promise.all([
     sumPaid(today),
     sumPaid(month),
     sumPaid(),
@@ -130,6 +139,7 @@ export async function dashboardData() {
     prisma.user.count({ where: { role: "CUSTOMER" } }),
     prisma.product.count({ where: { status: "ACTIVE" } }),
     lowStockVariants(8),
+    lowStockCount(),
     dailySeries({ from: new Date(today.getTime() - 29 * 86400_000), to: now }),
     salesByPeriod({ from: monthsBack, to: now }, "month"),
     salesByProduct({ from: new Date(today.getTime() - 29 * 86400_000), to: now }, 5),
@@ -137,8 +147,6 @@ export async function dashboardData() {
     ordersByStatus({ from: new Date(0), to: now }),
     prisma.order.findMany({ orderBy: { createdAt: "desc" }, take: 8, include: { payment: { select: { status: true, method: true } } } }),
   ]);
-
-  const lowTotal = (await lowStockVariants(10_000)).length;
 
   return {
     kpis: {
