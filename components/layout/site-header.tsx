@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, Heart, LogOut, Menu, Package, Search, ShoppingBag, User, LayoutDashboard, X } from "lucide-react";
+import { ChevronDown, Flame, Heart, LogOut, Menu, Package, Search, ShoppingBag, User, LayoutDashboard, X } from "lucide-react";
 import { toast } from "sonner";
 import { logoutAction } from "@/app/actions/auth";
 import { useCart, cartCount } from "@/hooks/use-cart";
@@ -19,10 +19,9 @@ type Props = {
   storeName: string;
   logoUrl: string | null;
   categories: NavCategory[];
-  announcement: string | null;
 };
 
-export function SiteHeader({ storeName, logoUrl, categories, announcement }: Props) {
+export function SiteHeader({ storeName, logoUrl, categories }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const user = useSession((s) => s.user);
@@ -59,25 +58,24 @@ export function SiteHeader({ storeName, logoUrl, categories, announcement }: Pro
     router.refresh();
   }
 
-  const link = "relative px-3 py-2 text-sm font-medium transition-colors hover:text-brand";
+  const link = "relative rounded-full px-2.5 py-2 text-sm font-medium transition-colors hover:text-brand 2xl:px-3.5";
+  const pill = "bg-brand text-white shadow-soft hover:text-white"; // enlace de la página actual
   const active = (href: string) => pathname === href;
 
   return (
-    <header className={cn("sticky top-0 z-40 bg-white/95 backdrop-blur transition-shadow", scrolled && "shadow-[0_4px_24px_-12px_rgba(0,0,0,0.18)]")}>
-      {announcement && <div className="bg-brand px-4 py-2 text-center text-xs font-medium text-white sm:text-sm">{announcement}</div>}
-
+    <header className={cn("sticky top-0 z-40 bg-white/95 backdrop-blur transition-shadow", scrolled ? "shadow-[0_4px_24px_-12px_rgba(0,0,0,0.22)]" : "shadow-[0_1px_0_rgba(0,0,0,0.05)]")}>
       <div className="container-page flex h-16 items-center gap-3 sm:h-[72px]">
-        <button onClick={() => setMobileOpen(true)} className="-ml-2 rounded-full p-2 transition hover:bg-brand-tint lg:hidden" aria-label="Abrir menú">
+        <button onClick={() => setMobileOpen(true)} className="-ml-2 rounded-full p-2 transition hover:bg-brand-tint xl:hidden" aria-label="Abrir menú">
           <Menu className="h-6 w-6" />
         </button>
 
         <Logo logoUrl={logoUrl} name={storeName} className="h-9 sm:h-11" priority />
 
-        <nav className="ml-6 hidden items-center lg:flex" aria-label="Principal">
-          <Link href="/" className={cn(link, active("/") && "text-brand")}>Inicio</Link>
+        <nav className="ml-3 hidden items-center xl:flex 2xl:ml-6" aria-label="Principal">
+          <Link href="/" className={cn(link, active("/") && pill)}>Inicio</Link>
           {categories.map((c) => (
             <div key={c.id} className="group relative" onMouseEnter={() => setOpenCat(c.id)} onMouseLeave={() => setOpenCat(null)}>
-              <Link href={`/categorias/${c.slug}`} className={cn(link, "inline-flex items-center gap-1", pathname === `/categorias/${c.slug}` && "text-brand")}>
+              <Link href={`/categorias/${c.slug}`} className={cn(link, "inline-flex items-center gap-1", pathname.startsWith(`/categorias/${c.slug}`) && pill)}>
                 {c.name}
                 {c.subcategories.length > 0 && <ChevronDown className="h-3.5 w-3.5 transition group-hover:rotate-180" />}
               </Link>
@@ -97,13 +95,13 @@ export function SiteHeader({ storeName, logoUrl, categories, announcement }: Pro
               )}
             </div>
           ))}
-          <Link href="/ofertas" className={cn(link, "text-brand", active("/ofertas") && "underline underline-offset-8")}>Ofertas</Link>
-          <Link href="/nosotros" className={cn(link, active("/nosotros") && "text-brand")}>Nosotros</Link>
-          <Link href="/contacto" className={cn(link, active("/contacto") && "text-brand")}>Contacto</Link>
+          <Link href="/ofertas" className={cn(link, "inline-flex items-center gap-1", active("/ofertas") && pill)}>Ofertas <Flame className="h-4 w-4 text-orange-500" aria-hidden /></Link>
+          <Link href="/nosotros" className={cn(link, active("/nosotros") && pill)}>Nosotros</Link>
+          <Link href="/contacto" className={cn(link, active("/contacto") && pill)}>Contacto</Link>
         </nav>
 
         <div className="ml-auto flex items-center gap-1 sm:gap-2">
-          <SearchBox className="mr-1 hidden w-64 xl:block" />
+          <SearchBox className="mr-1 hidden w-48 xl:block 2xl:w-72" />
           <button onClick={() => setSearchOpen((v) => !v)} className="rounded-full p-2.5 transition hover:bg-brand-tint xl:hidden" aria-label="Buscar">
             {searchOpen ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
           </button>

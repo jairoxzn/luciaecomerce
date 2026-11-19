@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getNavCategories } from "@/lib/services/catalog";
 import { getSettings, SETTINGS_TAG } from "@/lib/services/settings";
 import { formatPEN } from "@/lib/utils";
+import { TopBar } from "@/components/layout/top-bar";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { WhatsAppFloat } from "@/components/layout/whatsapp-float";
@@ -24,7 +25,8 @@ export default async function StoreLayout({ children }: { children: React.ReactN
 
   return (
     <>
-      <SiteHeader storeName={settings.storeName} logoUrl={settings.logoUrl} categories={categories} announcement={announcement} />
+      <TopBar settings={settings} announcement={announcement} />
+      <SiteHeader storeName={settings.storeName} logoUrl={settings.logoUrl} categories={categories} />
       <main id="contenido">{children}</main>
       <SiteFooter settings={settings} categories={categories} />
       <WhatsAppFloat phone={settings.whatsapp} storeName={settings.storeName} />

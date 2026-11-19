@@ -388,7 +388,8 @@ async function loadHomeData() {
     cardsFor({ isNew: true }, { createdAt: "desc" }, 8),
   ]);
   const [best, offers] = await Promise.all([
-    cardsFor({}, [{ isBestSeller: "desc" }, { soldCount: "desc" }], 8),
+    // «Más vendidos»: solo productos marcados como tales o con ventas reales (no se rellena con cualquiera)
+    cardsFor({ OR: [{ isBestSeller: true }, { soldCount: { gt: 0 } }] }, [{ isBestSeller: "desc" }, { soldCount: "desc" }], 8),
     cardsFor({ OR: [{ salePrice: { not: null } }] }, { updatedAt: "desc" }, 8),
   ]);
   return { hero, promo, collections, featured, newest, best, offers };
