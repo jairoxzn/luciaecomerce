@@ -564,6 +564,28 @@ model Banner {
   @@index([position, isActive, sortOrder])
 }
 
+// ───────────────────────── Catálogos compartibles ─────────────────────────
+
+/// Catálogo público (enlace /c/{token}) que el administrador comparte con sus clientes.
+/// Alcance: productIds (si no está vacío) > categoryIds (si no está vacío) > todo el catálogo activo.
+model ShareCatalog {
+  id          String    @id @default(cuid())
+  token       String    @unique
+  title       String
+  message     String?
+  categoryIds String[]
+  productIds  String[]
+  showPrices  Boolean   @default(true)
+  onlyInStock Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  expiresAt   DateTime?
+  views       Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([createdAt])
+}
+
 // ───────────────────────── Configuración ─────────────────────────
 
 model ShippingZone {

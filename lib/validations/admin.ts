@@ -113,6 +113,22 @@ export const bannerSchema = z.object({
 });
 export type BannerInput = z.input<typeof bannerSchema>;
 
+// ───────── Catálogo compartible ─────────
+export const shareCatalogSchema = z
+  .object({
+    id: z.string().optional(),
+    title: text("El título", 3, 80),
+    message: optionalText(400),
+    categoryIds: z.array(idField).max(100).default([]),
+    productIds: z.array(idField).max(300, "Máximo 300 productos por catálogo").default([]),
+    showPrices: z.boolean(),
+    onlyInStock: z.boolean(),
+    isActive: z.boolean(),
+    expiresAt: endDateStr,
+  })
+  .refine((d) => !d.expiresAt || d.expiresAt.getTime() > Date.now(), { path: ["expiresAt"], message: "La fecha de vencimiento debe ser futura" });
+export type ShareCatalogInput = z.input<typeof shareCatalogSchema>;
+
 // ───────── Operación ─────────
 export const inventoryAdjustSchema = z.object({
   variantId: idField,

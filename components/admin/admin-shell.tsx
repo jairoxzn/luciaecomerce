@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, Bell, Boxes, CreditCard, ExternalLink, Image as ImageIcon, LayoutDashboard, LogOut, Mail, Menu, Percent, Settings, ShoppingBag, Shirt, Tags, Ticket, Users } from "lucide-react";
+import { BarChart3, Bell, Boxes, CreditCard, ExternalLink, Image as ImageIcon, LayoutDashboard, LogOut, Mail, Menu, Percent, Settings, Share2, ShoppingBag, Shirt, Tags, Ticket, Users } from "lucide-react";
 import { toast } from "sonner";
 import { logoutAction } from "@/app/actions/auth";
 import { markNotificationsReadAction } from "@/app/admin/actions/notifications";
@@ -17,6 +17,7 @@ export type AdminNotification = { id: string; title: string; body: string; creat
 const NAV = [
   { href: "/admin/dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { href: "/admin/productos", label: "Productos", Icon: Shirt },
+  { href: "/admin/catalogo", label: "Catálogo compartido", Icon: Share2 },
   { href: "/admin/categorias", label: "Categorías", Icon: Tags },
   { href: "/admin/inventario", label: "Inventario", Icon: Boxes },
   { href: "/admin/pedidos", label: "Pedidos", Icon: ShoppingBag, badge: "orders" as const },
