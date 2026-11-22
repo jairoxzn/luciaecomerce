@@ -8,6 +8,7 @@ import { logAudit } from "@/lib/audit";
 import { refreshStore } from "@/lib/revalidate";
 import { applyStockDelta, setStockExact } from "@/lib/services/inventory";
 import { notifyLowStock } from "@/lib/services/notifications";
+import { scheduleStockAlerts } from "@/lib/services/stock-alerts";
 import { inventoryAdjustSchema, type InventoryAdjustInput } from "@/lib/validations/admin";
 
 export async function adjustInventoryAction(raw: InventoryAdjustInput): Promise<ActionResult<{ stock: number }>> {
@@ -27,6 +28,7 @@ export async function adjustInventoryAction(raw: InventoryAdjustInput): Promise<
     if (result.crossedLow) await notifyLowStock(i.variantId, result.stock);
     await logAudit(admin.id, `INVENTORY_${i.mode}`, "ProductVariant", i.variantId, { quantity: i.quantity, reason: i.reason });
     refreshStore();
+    scheduleStockAlerts(); // avisa a quienes esperaban esta variante
     revalidatePath("/admin/inventario");
     return { ok: true, data: { stock: result.stock }, message: `Stock actualizado: ${result.stock} unidades.` };
   });

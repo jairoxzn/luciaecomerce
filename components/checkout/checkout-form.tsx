@@ -19,6 +19,7 @@ import { CartSummary } from "@/components/cart/cart-summary";
 import { CouponBox } from "@/components/cart/coupon-box";
 import { cn, formatPEN } from "@/lib/utils";
 import { placeOrderSchema, type PlaceOrderFormInput } from "@/lib/validations/checkout";
+import { ProofFields, useProofFile } from "@/components/orders/proof-picker";
 import { PaymentDetails } from "./payment-details";
 import type { CheckoutConfig } from "./types";
 
@@ -49,6 +50,7 @@ export function CheckoutForm({ config }: { config: CheckoutConfig }) {
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const proof = useProofFile(); // comprobante adjuntado en el checkout (opcional)
   const keyRef = useRef<string>("");
   const done = useRef(false);
 
@@ -143,9 +145,14 @@ export function CheckoutForm({ config }: { config: CheckoutConfig }) {
     }
     done.current = true;
     try { sessionStorage.removeItem("lj-idem"); } catch { /* noop */ }
+    const code = res.data!.code;
+    // Si adjuntó el comprobante, se envía ya mismo: el pedido llega al administrador con el pago «en revisión»
+    const sendsProof = !!proof.file && values.paymentMethod !== "COD";
+    const proofError = sendsProof ? await proof.upload(code) : null;
     clearCart();
-    toast.success("¡Pedido registrado!");
-    router.replace(`/checkout/confirmacion/${res.data!.code}`);
+    if (proofError) toast.warning(`Pedido registrado, pero no pudimos enviar el comprobante: ${proofError} Puedes subirlo desde tu pedido.`, { duration: 8000 });
+    else toast.success(sendsProof ? "¡Pedido registrado y comprobante enviado!" : "¡Pedido registrado!");
+    router.replace(`/checkout/confirmacion/${code}`);
   }
 
   if (!hydrated) return <Skeleton className="h-96 w-full" />;
@@ -276,7 +283,13 @@ export function CheckoutForm({ config }: { config: CheckoutConfig }) {
                 </div>
               )} />
               {paymentOption && <PaymentDetails option={paymentOption} instructions={config.paymentInstructions} amount={quote ? formatPEN(quote.totalCents / 100) : undefined} />}
-              {paymentOption && paymentOption.method !== "COD" && <p className="text-xs text-stone">Al confirmar el pedido podrás subir tu comprobante de pago. El pedido se confirma cuando validamos tu pago.</p>}
+              {paymentOption && paymentOption.method !== "COD" && (
+                <div className="space-y-3 rounded-2xl border border-dashed border-brand-soft bg-white p-4 sm:p-5">
+                  <p className="text-sm font-semibold">¿Ya hiciste el pago? Adjunta tu comprobante ahora</p>
+                  <p className="text-xs text-stone">Así validamos tu pago más rápido. También puedes subirlo después desde tu pedido. El pedido se confirma cuando validamos tu pago.</p>
+                  <ProofFields proof={proof} idPrefix="checkout-proof" />
+                </div>
+              )}
             </section>
           )}
 
@@ -286,7 +299,7 @@ export function CheckoutForm({ config }: { config: CheckoutConfig }) {
               <div className="grid gap-3 text-sm sm:grid-cols-2">
                 <div className="rounded-2xl bg-mist p-4"><p className="mb-1 font-semibold">Cliente</p><p>{getValues("customer.firstName")} {getValues("customer.lastName")}</p><p className="text-stone">{getValues("customer.email")} · {getValues("customer.phone")}</p></div>
                 <div className="rounded-2xl bg-mist p-4"><p className="mb-1 font-semibold">{method === "PICKUP" ? "Recojo en tienda" : "Envío a domicilio"}</p>{method === "PICKUP" ? <p className="text-stone">{config.pickupAddress}</p> : <p className="text-stone">{getValues("delivery.addressLine")}, {getValues("delivery.district")}, {getValues("delivery.province")}, {department}</p>}</div>
-                <div className="rounded-2xl bg-mist p-4 sm:col-span-2"><p className="mb-1 font-semibold">Pago</p><p className="text-stone">{paymentOption?.label}</p></div>
+                <div className="rounded-2xl bg-mist p-4 sm:col-span-2"><p className="mb-1 font-semibold">Pago</p><p className="text-stone">{paymentOption?.label}</p>{paymentOption?.method !== "COD" && <p className="mt-1 text-xs text-stone">{proof.file ? `Comprobante adjunto: ${proof.file.name}` : "Sin comprobante: lo podrás subir después desde tu pedido."}</p>}</div>
               </div>
               {serverError && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{serverError}</p>}
               <p className="text-xs text-stone">Al confirmar aceptas los <Link href="/politicas/terminos" className="underline" target="_blank">términos y condiciones</Link> y la <Link href="/politicas/privacidad" className="underline" target="_blank">política de privacidad</Link>.</p>
@@ -300,9 +313,11 @@ export function CheckoutForm({ config }: { config: CheckoutConfig }) {
               <Link href="/carrito" className="text-sm font-medium text-stone hover:text-brand">← Volver al carrito</Link>
             )}
             {step < STEPS.length - 1 ? (
-              <Button type="button" size="lg" onClick={next}>Continuar <ArrowRight className="h-4 w-4" /></Button>
+              // `key` distinto: sin él React reutiliza el mismo <button> y le cambia el tipo a «submit» en mitad del clic
+              // (la validación se resuelve en microtareas), con lo que pulsar «Continuar» enviaba el pedido sin mostrar el resumen
+              <Button key="next" type="button" size="lg" onClick={next}>Continuar <ArrowRight className="h-4 w-4" /></Button>
             ) : (
-              <Button type="submit" size="lg" loading={submitting} disabled={!quote || quote.hasBlockingIssues || quote.shippingCents === null}>
+              <Button key="submit" type="submit" size="lg" loading={submitting} disabled={!quote || quote.hasBlockingIssues || quote.shippingCents === null}>
                 Confirmar pedido {quote && `· ${formatPEN(quote.totalCents / 100)}`}
               </Button>
             )}

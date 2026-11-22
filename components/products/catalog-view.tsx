@@ -53,7 +53,7 @@ export async function CatalogView({ filters, searchParams, basePath, fixedCatego
 
       {/* Compra por categoría: círculos con foto (solo si la página no está acotada a una categoría) */}
       {!fixedCategory && categories.length > 0 && (
-        <nav aria-label="Compra por categoría" className="no-scrollbar -mx-4 mb-6 flex gap-4 overflow-x-auto px-4 pb-1 sm:mx-0 sm:gap-6 sm:px-0">
+        <nav aria-label="Compra por categoría" className="no-scrollbar -mx-4 mb-4 flex gap-4 overflow-x-auto px-4 pb-1 pt-2 sm:mx-0 sm:gap-6 sm:px-0">
           {[{ id: "all", name: "Todo", slug: "", imageUrl: null as string | null }, ...categories].map((c) => {
             const on = (c.slug || undefined) === (filters.categoria || undefined);
             return (

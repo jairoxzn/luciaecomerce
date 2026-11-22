@@ -7,6 +7,7 @@ import { assertAdmin } from "@/lib/auth/guards";
 import { logAudit } from "@/lib/audit";
 import { refreshStore } from "@/lib/revalidate";
 import { changeOrderStatus } from "@/lib/services/orders";
+import { scheduleStockAlerts } from "@/lib/services/stock-alerts";
 import { approvePayment, rejectPayment } from "@/lib/services/payments";
 import { orderStatusSchema } from "@/lib/validations/admin";
 
@@ -23,7 +24,10 @@ export async function updateOrderStatusAction(raw: import("zod").input<typeof or
     const i = orderStatusSchema.parse(raw);
     await changeOrderStatus({ orderId: i.orderId, to: i.status, note: i.note ?? null, actorId: admin.id });
     await logAudit(admin.id, "ORDER_STATUS", "Order", i.orderId, { to: i.status, note: i.note ?? null });
-    if (i.status === "CANCELADO") refreshStore(); // el stock devuelto vuelve a estar disponible
+    if (i.status === "CANCELADO") {
+      refreshStore(); // el stock devuelto vuelve a estar disponible
+      scheduleStockAlerts(); // y quienes esperaban esa talla reciben su aviso
+    }
     refresh(i.orderId);
     return { ok: true, message: "Estado actualizado." };
   });

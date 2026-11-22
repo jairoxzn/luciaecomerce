@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import type { ProductDetail } from "@/lib/services/catalog";
 import type { SizeGuideSection } from "@/lib/services/settings";
 import { ProductGallery } from "./product-gallery";
+import { NotifyStock } from "./notify-stock";
 import { FavoriteButton } from "./favorite-button";
 import { SizeGuideButton } from "./size-guide";
 
@@ -49,8 +50,8 @@ export function ProductView({ product: p, sizeGuide, shippingPolicy, returnPolic
 
   // Si solo hay una talla (p. ej. "Única") se preselecciona
   useEffect(() => {
-    if (variantsForColor.length === 1 && variantsForColor[0].stock > 0) setSize(variantsForColor[0].sizeName);
-    else if (size && !variantsForColor.some((v) => v.sizeName === size && v.stock > 0)) setSize(null);
+    if (variantsForColor.length === 1) setSize(variantsForColor[0].sizeName);
+    else if (size && !variantsForColor.some((v) => v.sizeName === size)) setSize(null);
   }, [variantsForColor, size]);
 
   // Al cambiar de color, muestra la foto de ese color (si existe)
@@ -120,13 +121,13 @@ export function ProductView({ product: p, sizeGuide, shippingPolicy, returnPolic
               <button
                 key={v.id}
                 onClick={() => setSize(v.sizeName)}
-                disabled={v.stock <= 0}
                 aria-pressed={size === v.sizeName}
-                title={v.stock <= 0 ? "Agotado" : undefined}
+                title={v.stock <= 0 ? "Agotado: te avisamos cuando vuelva" : undefined}
                 className={cn(
                   "min-w-12 rounded-xl border px-4 py-2.5 text-sm font-semibold transition",
                   size === v.sizeName ? "border-brand bg-brand text-white shadow-soft" : "border-neutral-200 hover:border-brand",
-                  v.stock <= 0 && "cursor-not-allowed border-dashed bg-mist text-neutral-300 line-through hover:border-neutral-200",
+                  v.stock <= 0 && "border-dashed bg-mist text-neutral-400 line-through hover:border-brand",
+                  v.stock <= 0 && size === v.sizeName && "border-solid bg-ink text-white no-underline hover:border-ink",
                 )}
               >
                 {v.sizeName}
@@ -138,6 +139,8 @@ export function ProductView({ product: p, sizeGuide, shippingPolicy, returnPolic
             {selected && alreadyInCart > 0 && <span className="font-normal text-stone"> · {alreadyInCart} en tu carrito</span>}
           </p>
         </div>
+
+        {selected && selected.stock <= 0 && <NotifyStock variantId={selected.id} label={`${selected.colorName} / talla ${selected.sizeName}`} />}
 
         {/* Cantidad y acciones */}
         <div className="mt-6 flex flex-wrap items-center gap-3">

@@ -7,6 +7,8 @@ import { Card, ColorDot, FilterTabs, PageHeader, SearchForm, Table, TableEmpty, 
 import { Pagination } from "@/components/ui/pagination";
 import { Badge } from "@/components/ui/badge";
 import { AdjustButton } from "@/components/admin/inventory/adjust-button";
+import { getRestockDemand } from "@/lib/services/stock-alerts";
+import { BellRing } from "lucide-react";
 
 export const metadata = { title: "Inventario" };
 const PAGE = 25;
@@ -80,22 +82,40 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     ...(filtro === "bajo" ? { id: { in: lowIds.map((x) => x.id) } } : {}),
     ...(filtro === "agotado" ? { stock: 0 } : {}),
   };
-  const [total, variants] = await Promise.all([
+  const [total, variants, demand] = await Promise.all([
     prisma.productVariant.count({ where }),
     prisma.productVariant.findMany({ where, orderBy: [{ stock: "asc" }, { product: { name: "asc" } }], skip: (page - 1) * PAGE, take: PAGE, include: { product: { select: { id: true, name: true, status: true } }, size: true, color: true } }),
+    getRestockDemand(8),
   ]);
+  // Clientes en espera de cada variante de esta página (columna «Esperan»)
+  const waitingRows = variants.length ? await prisma.stockAlert.groupBy({ by: ["variantId"], where: { notifiedAt: null, variantId: { in: variants.map((v) => v.id) } }, _count: { _all: true } }) : [];
+  const waitingBy = new Map(waitingRows.map((r) => [r.variantId, r._count._all]));
 
   return (
     <>
       <PageHeader title="Inventario" description="Control real de existencias por variante, con historial y alertas de stock mínimo." />
       {tabsView}
+      {demand.length > 0 && (
+        <Card title="Qué reponer primero" className="mb-6" action={<span className="flex items-center gap-1.5 text-xs font-semibold text-brand"><BellRing className="h-4 w-4" /> Clientes esperando que vuelva el stock</span>}>
+          <ul className="divide-y divide-neutral-100">
+            {demand.map((d) => (
+              <li key={d.variantId} className="flex flex-wrap items-center gap-3 py-2.5 text-sm">
+                <span className="flex min-w-0 flex-1 items-center gap-2"><ColorDot hex={d.hex} /><Link href={`/admin/productos/${d.productId}`} className="truncate font-semibold hover:text-brand">{d.product}</Link><span className="shrink-0 text-stone">{d.color} · {d.size}</span></span>
+                <span className="rounded-full bg-brand-tint px-3 py-1 text-xs font-bold text-brand">{d.waiting} {d.waiting === 1 ? "cliente espera" : "clientes esperan"}</span>
+                <span className={`w-24 text-right text-xs font-semibold ${d.stock === 0 ? "text-red-600" : "text-green-700"}`}>{d.stock === 0 ? "Agotado" : `Stock: ${d.stock}`}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-stone">Al reponer el stock, a estos clientes se les avisa automáticamente por correo (o WhatsApp si está activo). Sin SMTP, el aviso queda pendiente.</p>
+        </Card>
+      )}
       <FilterTabs current={filtro} hrefFor={(v) => `/admin/inventario${buildQuery(sp, { filtro: v === "todos" ? undefined : v, pagina: undefined })}`} tabs={[{ value: "todos", label: "Todas", count: totalVariants }, { value: "bajo", label: "Stock bajo", count: lowIds.length }, { value: "agotado", label: "Agotadas", count: outCount }]} />
       <Card padded={false}>
         <div className="border-b border-neutral-100 p-4"><SearchForm placeholder="Buscar por producto o SKU…" defaultValue={q} hidden={{ filtro: filtro === "todos" ? undefined : filtro }} /></div>
         <Table>
-          <thead><tr><Th>Producto</Th><Th>Variante</Th><Th>SKU</Th><Th>Stock</Th><Th>Mínimo</Th><Th>Estado</Th><Th /></tr></thead>
+          <thead><tr><Th>Producto</Th><Th>Variante</Th><Th>SKU</Th><Th>Stock</Th><Th>Mínimo</Th><Th>Esperan</Th><Th>Estado</Th><Th /></tr></thead>
           <tbody>
-            {variants.length === 0 && <TableEmpty cols={7} />}
+            {variants.length === 0 && <TableEmpty cols={8} />}
             {variants.map((v) => {
               const out = v.stock === 0;
               const low = v.stock <= v.minStock;
@@ -106,6 +126,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                   <Td className="font-mono text-xs text-stone">{v.sku}</Td>
                   <Td className={`text-base font-bold ${out ? "text-red-600" : low ? "text-amber-600" : ""}`}>{v.stock}</Td>
                   <Td className="text-stone">{v.minStock}</Td>
+                  <Td>{waitingBy.get(v.id) ? <span className="rounded-full bg-brand-tint px-2.5 py-0.5 text-xs font-bold text-brand">{waitingBy.get(v.id)}</span> : <span className="text-neutral-300">—</span>}</Td>
                   <Td>{!v.isActive ? <Badge className="bg-neutral-100 text-neutral-600 ring-neutral-200">Inactiva</Badge> : out ? <Badge className="bg-red-50 text-red-700 ring-red-200">Agotado</Badge> : low ? <Badge className="bg-amber-50 text-amber-700 ring-amber-200">Stock bajo</Badge> : <Badge className="bg-green-50 text-green-700 ring-green-200">OK</Badge>}</Td>
                   <Td className="text-right"><AdjustButton variantId={v.id} stock={v.stock} label={`${v.product.name} · ${v.color.name} · ${v.size.name}`} /></Td>
                 </tr>

@@ -11,6 +11,7 @@ import { refreshStore } from "@/lib/revalidate";
 import { deleteByUrlOrKey } from "@/lib/storage";
 import { dec, slugify, toCents } from "@/lib/utils";
 import { applyStockDelta, setStockExact } from "@/lib/services/inventory";
+import { scheduleStockAlerts } from "@/lib/services/stock-alerts";
 import { generateVariantsSchema, productSchema, variantUpdateSchema, type GenerateVariantsInput, type ProductInput, type VariantUpdateInput } from "@/lib/validations/admin";
 
 async function uniqueSlug(base: string, excludeId?: string) {
@@ -231,6 +232,7 @@ export async function updateVariantAction(raw: VariantUpdateInput): Promise<Acti
     });
     await logAudit(admin.id, "UPDATE_VARIANT", "ProductVariant", i.id, { stock: i.stock, price: i.price ?? null });
     refreshStore();
+    scheduleStockAlerts();
     revalidatePath(`/admin/productos/${v.productId}`);
     revalidatePath("/admin/inventario");
     return { ok: true, message: "Variante actualizada." };

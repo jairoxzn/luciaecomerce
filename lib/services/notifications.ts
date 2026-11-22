@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { formatPEN, normalizePeruPhone, num } from "@/lib/utils";
 import { getSettings } from "@/lib/services/settings";
 import { sendWhatsAppText, whatsappEnvConfigured } from "@/lib/whatsapp";
+import { mailerConfigured, sendMail } from "@/lib/mailer";
+import { PAYMENT_METHOD_LABEL } from "@/lib/constants";
+import { absoluteUrl } from "@/lib/utils";
 
 type Ctx = { reason?: string | null };
 
@@ -35,7 +38,7 @@ function customerMessage(type: NotificationType, code: string, store: string, ct
 export async function notifyOrderEvent(orderId: string, type: NotificationType, ctx: Ctx = {}) {
   try {
     const [order, settings] = await Promise.all([
-      prisma.order.findUnique({ where: { id: orderId }, select: { id: true, code: true, userId: true, firstName: true, lastName: true, phone: true, total: true } }),
+      prisma.order.findUnique({ where: { id: orderId }, select: { id: true, code: true, userId: true, firstName: true, lastName: true, phone: true, total: true, payment: { select: { method: true } } } }),
       getSettings(),
     ]);
     if (!order) return;
@@ -47,6 +50,7 @@ export async function notifyOrderEvent(orderId: string, type: NotificationType, 
           ? `${order.firstName} ${order.lastName} · ${formatPEN(num(order.total))}`
           : `${order.firstName} ${order.lastName} envió un comprobante de pago para revisión.`;
       await prisma.notification.create({ data: { type, channel: "PANEL", status: "SENT", title, body, forAdmin: true, orderId, sentAt: new Date() } });
+      await emailAdmins(type, order, title);
     }
 
     if (CUSTOMER_EVENTS.includes(type)) {
@@ -76,6 +80,38 @@ export async function notifyOrderEvent(orderId: string, type: NotificationType, 
   } catch (e) {
     console.error("[notify] fallo al registrar notificación", e);
   }
+}
+
+/**
+ * Correo inmediato a los administradores activos: un comprobante esperando revisión es lo que más retrasa una venta.
+ * Sin SMTP no se envía (y no se simula): el aviso del panel y el contador en vivo siguen funcionando.
+ */
+async function emailAdmins(type: NotificationType, order: { code: string; id: string; firstName: string; lastName: string; total: Parameters<typeof num>[0]; payment: { method: keyof typeof PAYMENT_METHOD_LABEL } | null }, title: string) {
+  if (!mailerConfigured()) return;
+  const admins = await prisma.user.findMany({ where: { role: "ADMIN", isActive: true }, select: { email: true } });
+  if (admins.length === 0) return;
+  const amount = formatPEN(num(order.total));
+  const method = order.payment ? PAYMENT_METHOD_LABEL[order.payment.method] : "—";
+  const link = absoluteUrl(type === "PAGO_RECIBIDO" ? "/admin/pagos" : `/admin/pedidos/${order.id}`);
+  const who = `${order.firstName} ${order.lastName}`;
+  const lead = type === "PAGO_RECIBIDO" ? "Un cliente envió su comprobante y está esperando que lo revises." : "Entró un pedido nuevo.";
+  await Promise.all(
+    admins.map((a) =>
+      sendMail({
+        to: a.email,
+        subject: `${type === "PAGO_RECIBIDO" ? "💳 " : "🛍️ "}${title} · ${amount}`,
+        text: `${lead}
+
+Pedido: ${order.code}
+Cliente: ${who}
+Método: ${method}
+Monto: ${amount}
+
+Revisar: ${link}`,
+        html: `<p>${lead}</p><p><strong>${order.code}</strong> · ${who}<br>${method} · <strong>${amount}</strong></p><p><a href="${link}" style="background:#e65385;color:#fff;padding:10px 20px;border-radius:999px;text-decoration:none;font-weight:bold">${type === "PAGO_RECIBIDO" ? "Revisar comprobante" : "Ver pedido"}</a></p>`,
+      }),
+    ),
+  );
 }
 
 export async function notifyLowStock(variantId: string, stockAfter: number) {
