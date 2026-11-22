@@ -136,16 +136,25 @@ function FilterPanel({ categories, fixedCategory, facets, priceRange, showCatego
           </div>
         )}
         <form
-          className="flex items-center gap-2"
+          className="space-y-2.5"
           onSubmit={(e) => {
             e.preventDefault();
             update({ min: min || undefined, max: max || undefined });
           }}
         >
-          <Input type="number" inputMode="numeric" min={0} placeholder={`${priceRange.min}`} value={min} onChange={(e) => setMin(e.target.value)} aria-label="Precio mínimo" className="h-10" />
-          <span className="text-stone">–</span>
-          <Input type="number" inputMode="numeric" min={0} placeholder={`${priceRange.max}`} value={max} onChange={(e) => setMax(e.target.value)} aria-label="Precio máximo" className="h-10" />
-          <Button type="submit" variant="dark" size="sm">OK</Button>
+          <div className="flex items-center gap-2">
+            {([["Precio mínimo", min, setMin, priceRange.min], ["Precio máximo", max, setMax, priceRange.max]] as const).map(([label, value, set, ph], i) => (
+              <div key={label} className="contents">
+                {i === 1 && <span className="text-stone" aria-hidden>–</span>}
+                <div className="relative min-w-0 flex-1">
+                  <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-stone">S/</span>
+                  {/* Sin flechas del navegador (tapaban el número en cajas angostas); el teclado numérico sigue disponible en móvil */}
+                  <Input type="number" inputMode="numeric" min={0} placeholder={`${ph}`} value={value} onChange={(e) => set(e.target.value)} aria-label={label} className="h-10 pl-8 pr-2 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none" />
+                </div>
+              </div>
+            ))}
+          </div>
+          <Button type="submit" variant="dark" size="sm" className="w-full">Aplicar precio</Button>
         </form>
       </Group>
 

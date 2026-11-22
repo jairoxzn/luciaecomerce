@@ -45,6 +45,21 @@ test.describe("catálogo", () => {
     await expect(chips).toHaveCount(0);
   });
 
+  test("el filtro de precio muestra lo que se escribe y se aplica", async ({ page }) => {
+    await page.goto("/catalogo");
+    const panel = await filterPanel(page);
+    const min = panel.getByLabel("Precio mínimo");
+    await min.fill("125");
+    await expect(min).toHaveValue("125");
+    // Regresión: la caja era tan angosta que las flechas del navegador tapaban el número
+    expect((await min.boundingBox())!.width).toBeGreaterThan(70);
+    await expect(async () => {
+      if (!/min=125/.test(page.url())) await panel.getByRole("button", { name: "Aplicar precio" }).click({ timeout: 10_000 });
+      await expect(page).toHaveURL(/min=125/, { timeout: 15_000 });
+    }).toPass({ timeout: 90_000 });
+    await expect(page.locator("article")).toHaveCount(1); // solo la camisa de S/ 150
+  });
+
   test("ordena por precio de menor a mayor", async ({ page }) => {
     await page.goto("/catalogo");
     // Se reintenta: un cambio hecho antes de que React termine de hidratar la página no se aplica
