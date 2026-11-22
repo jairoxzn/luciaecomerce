@@ -46,3 +46,10 @@ next-env.d.ts
 .test-storage
 
 .next-build
+
+# playwright (e2e)
+/playwright-report/
+/test-results/
+/.next-e2e/
+/.test-storage-e2e/
+/tests/e2e/.auth/
