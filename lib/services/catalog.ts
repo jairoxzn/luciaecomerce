@@ -38,6 +38,7 @@ export type ProductCardData = {
   isBestSeller: boolean;
   isDemo: boolean;
   inStock: boolean;
+  lowStock: boolean; // quedan pocas unidades en total (urgencia suave en la tarjeta)
   colors: { name: string; hex: string }[];
 };
 
@@ -91,6 +92,7 @@ export function toCard(p: CardRow, promos: PromoRule[]): ProductCardData {
   const r = resolvePrice({ price: num(p.price), salePrice: p.salePrice ? num(p.salePrice) : null, categoryId: p.categoryId }, promos);
   const seen = new Map<string, { name: string; hex: string; order: number }>();
   for (const v of p.variants) if (!seen.has(v.color.name)) seen.set(v.color.name, { name: v.color.name, hex: v.color.hex, order: v.color.sortOrder });
+  const totalStock = p.variants.reduce((n, v) => n + Math.max(0, v.stock), 0);
   return {
     id: p.id,
     slug: p.slug,
@@ -104,7 +106,8 @@ export function toCard(p: CardRow, promos: PromoRule[]): ProductCardData {
     isNew: p.isNew,
     isBestSeller: p.isBestSeller,
     isDemo: p.isDemo,
-    inStock: p.variants.some((v) => v.stock > 0),
+    inStock: totalStock > 0,
+    lowStock: totalStock > 0 && totalStock <= 5,
     colors: [...seen.values()].sort((a, b) => a.order - b.order).map(({ name, hex }) => ({ name, hex })),
   };
 }

@@ -11,5 +11,5 @@ export const metadata: Metadata = { title: "Ofertas", description: "Aprovecha lo
 
 export default async function OffersPage({ searchParams }: Props) {
   const sp = await searchParams;
-  return <CatalogView filters={parseCatalogParams(sp, { oferta: true })} searchParams={sp} basePath="/ofertas" heading="Ofertas especiales" intro="Descuentos vigentes en prendas seleccionadas." />;
+  return <CatalogView filters={parseCatalogParams(sp, { oferta: true })} searchParams={sp} basePath="/ofertas" heading="Ofertas especiales" eyebrow="Aprovecha"intro="Descuentos vigentes en prendas seleccionadas." />;
 }

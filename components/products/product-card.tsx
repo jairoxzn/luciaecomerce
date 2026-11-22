@@ -44,11 +44,35 @@ export const ProductCard = memo(function ProductCard({ product, priority = false
           {p.discountPct > 0 && <span className="rounded-full bg-brand px-2.5 py-1 text-[11px] font-bold text-white shadow-soft">-{p.discountPct}%</span>}
           {p.isNew && <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-semibold text-white", boxed ? "bg-[#1ea7e1]" : "bg-ink")}>{boxed ? "NUEVO" : "Nuevo"}</span>}
           {p.isBestSeller && !p.isNew && !boxed && <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-semibold text-brand shadow-card">Más vendido</span>}
+          {p.lowStock && !boxed && <span className="rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800">Últimas unidades</span>}
         </div>
         <FavoriteButton productId={p.id} name={p.name} className="absolute right-2.5 top-2.5" />
 
         {!p.inStock && (
           <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-ink/75 py-1.5 text-center text-xs font-semibold uppercase tracking-wider text-white">Agotado</span>
+        )}
+
+        {/* Compra rápida: en escritorio aparece una barra al pasar el cursor; en táctil, un botón redondo siempre visible */}
+        {!boxed && p.inStock && (
+          <>
+            <button
+              type="button"
+              onClick={() => setQuick(true)}
+              aria-label={`Agregar ${p.name} al carrito`}
+              className="absolute bottom-2.5 right-2.5 flex h-10 w-10 items-center justify-center rounded-full bg-white text-ink shadow-card transition hover:bg-brand hover:text-white active:scale-90 lg:hidden"
+            >
+              <ShoppingBag className="h-[18px] w-[18px]" />
+            </button>
+            <div className="absolute inset-x-2.5 bottom-2.5 hidden translate-y-3 opacity-0 transition duration-300 group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100 lg:block">
+              <button
+                type="button"
+                onClick={() => setQuick(true)}
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-white/95 text-sm font-semibold text-ink shadow-card backdrop-blur transition hover:bg-brand hover:text-white active:scale-[0.97]"
+              >
+                <ShoppingBag className="h-4 w-4" /> Compra rápida
+              </button>
+            </div>
+          </>
         )}
       </div>
 
@@ -85,16 +109,10 @@ export const ProductCard = memo(function ProductCard({ product, priority = false
               {p.colors.length > 5 && <span className="text-[11px] text-stone">+{p.colors.length - 5}</span>}
             </div>
           )}
-          <Price price={p.price} compareAt={p.compareAt} />
-          <button
-            type="button"
-            onClick={() => setQuick(true)}
-            disabled={!p.inStock}
-            className="mt-1 inline-flex h-10 items-center justify-center gap-2 rounded-full bg-brand text-sm font-semibold text-white transition hover:bg-brand-dark active:scale-[0.97] disabled:cursor-not-allowed disabled:bg-neutral-200 disabled:text-neutral-500"
-          >
-            <ShoppingBag className="h-4 w-4" />
-            {p.inStock ? "Agregar" : "Agotado"}
-          </button>
+          <div className="flex items-baseline gap-2">
+            <Price price={p.price} compareAt={p.compareAt} />
+            {p.discountPct > 0 && p.compareAt ? <span className="text-[11px] font-semibold text-emerald-600">Ahorras {formatPEN(p.compareAt - p.price)}</span> : null}
+          </div>
         </div>
       )}
 
