@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronDown, Flame, Heart, LogOut, Menu, Package, Search, ShoppingBag, User, LayoutDashboard, X } from "lucide-react";
@@ -34,7 +34,42 @@ export function SiteHeader({ storeName, logoUrl, categories }: Props) {
   const [accountOpen, setAccountOpen] = useState(false);
   const [openCat, setOpenCat] = useState<string | null>(null);
   const [scrolled, setScrolled] = useState(false);
+  // Modo compacto (menú hamburguesa): se activa solo cuando el menú de escritorio NO cabe en la fila, sea cual sea
+  // la cantidad o el largo de las categorías que cargue el administrador.
+  const rowRef = useRef<HTMLDivElement>(null);
+  const failedAt = useRef(0);
+  const [compact, setCompact] = useState(false);
   const count = hydrated ? cartQty : 0;
+
+  useLayoutEffect(() => {
+    let raf = 0;
+    const check = () => {
+      const row = rowRef.current;
+      if (!row) return;
+      const w = window.innerWidth;
+      if (w < 1280) return void setCompact(false); // por debajo de `xl` el CSS ya muestra el menú móvil
+      if (compact) {
+        if (w > failedAt.current + 8) setCompact(false); // se ensanchó: se vuelve a probar el menú de escritorio
+        return;
+      }
+      if (row.scrollWidth > row.clientWidth + 1) {
+        failedAt.current = w;
+        setCompact(true);
+      }
+    };
+    const onResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(check);
+    };
+    check();
+    window.addEventListener("resize", onResize);
+    const fonts = document.fonts?.ready.then(check); // al cargar la tipografía cambian los anchos
+    void fonts;
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [compact, categories]);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -58,20 +93,20 @@ export function SiteHeader({ storeName, logoUrl, categories }: Props) {
     router.refresh();
   }
 
-  const link = "relative rounded-full px-2.5 py-2 text-sm font-medium transition-colors hover:text-brand 2xl:px-3.5";
+  const link = "relative max-w-[13rem] shrink-0 truncate whitespace-nowrap rounded-full px-2.5 py-2 text-sm font-medium transition-colors hover:text-brand";
   const pill = "bg-brand text-white shadow-soft hover:text-white"; // enlace de la página actual
   const active = (href: string) => pathname === href;
 
   return (
     <header className={cn("sticky top-0 z-40 bg-white/95 backdrop-blur transition-shadow", scrolled ? "shadow-[0_4px_24px_-12px_rgba(0,0,0,0.22)]" : "shadow-[0_1px_0_rgba(0,0,0,0.05)]")}>
-      <div className="container-page flex h-16 items-center gap-3 sm:h-[72px]">
-        <button onClick={() => setMobileOpen(true)} className="-ml-2 rounded-full p-2 transition hover:bg-brand-tint xl:hidden" aria-label="Abrir menú">
+      <div ref={rowRef} className="mx-auto flex h-16 w-full max-w-[90rem] items-center gap-2 px-3 min-[360px]:gap-3 min-[360px]:px-4 sm:h-[72px] sm:px-6 lg:px-8">
+        <button onClick={() => setMobileOpen(true)} className={cn("-ml-2 shrink-0 rounded-full p-2 transition hover:bg-brand-tint", !compact && "xl:hidden")} aria-label="Abrir menú">
           <Menu className="h-6 w-6" />
         </button>
 
-        <Logo logoUrl={logoUrl} name={storeName} className="h-9 sm:h-11" priority />
+        <Logo logoUrl={logoUrl} name={storeName} className="h-9 shrink-0 sm:h-11" priority />
 
-        <nav className="ml-3 hidden items-center xl:flex 2xl:ml-6" aria-label="Principal">
+        <nav className={cn("ml-3 shrink-0 items-center", compact ? "hidden" : "hidden xl:flex")} aria-label="Principal">
           <Link href="/" className={cn(link, active("/") && pill)}>Inicio</Link>
           {categories.map((c) => (
             <div key={c.id} className="group relative" onMouseEnter={() => setOpenCat(c.id)} onMouseLeave={() => setOpenCat(null)}>
@@ -100,19 +135,19 @@ export function SiteHeader({ storeName, logoUrl, categories }: Props) {
           <Link href="/contacto" className={cn(link, active("/contacto") && pill)}>Contacto</Link>
         </nav>
 
-        <div className="ml-auto flex items-center gap-1 sm:gap-2">
-          <SearchBox className="mr-1 hidden w-48 xl:block 2xl:w-72" />
-          <button onClick={() => setSearchOpen((v) => !v)} className="rounded-full p-2.5 transition hover:bg-brand-tint xl:hidden" aria-label="Buscar">
+        <div className="ml-auto flex shrink-0 items-center sm:gap-2">
+          <SearchBox className={cn("mr-1 hidden w-48", !compact && "xl:block")} />
+          <button onClick={() => setSearchOpen((v) => !v)} className={cn("rounded-full p-2 sm:p-2.5 transition hover:bg-brand-tint", !compact && "xl:hidden")} aria-label="Buscar">
             {searchOpen ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
           </button>
 
-          <Link href="/favoritos" className="relative rounded-full p-2.5 transition hover:bg-brand-tint" aria-label="Favoritos">
+          <Link href="/favoritos" className="relative rounded-full p-2 sm:p-2.5 transition hover:bg-brand-tint" aria-label="Favoritos">
             <Heart className="h-5 w-5" />
             {favCount > 0 && <span className="absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">{favCount}</span>}
           </Link>
 
           <div className="relative">
-            <button onClick={() => setAccountOpen((v) => !v)} className="rounded-full p-2.5 transition hover:bg-brand-tint" aria-label="Mi cuenta" aria-expanded={accountOpen}>
+            <button onClick={() => setAccountOpen((v) => !v)} className="rounded-full p-2 sm:p-2.5 transition hover:bg-brand-tint" aria-label="Mi cuenta" aria-expanded={accountOpen}>
               <User className="h-5 w-5" />
             </button>
             {accountOpen && (
@@ -141,7 +176,7 @@ export function SiteHeader({ storeName, logoUrl, categories }: Props) {
             )}
           </div>
 
-          <button onClick={openDrawer} className="relative rounded-full p-2.5 transition hover:bg-brand-tint" aria-label={`Carrito (${count})`}>
+          <button onClick={openDrawer} className="relative rounded-full p-2 sm:p-2.5 transition hover:bg-brand-tint" aria-label={`Carrito (${count})`}>
             <ShoppingBag className="h-5 w-5" />
             {count > 0 && <span key={count} className="absolute right-0.5 top-0.5 flex h-4 min-w-4 animate-[pop_0.3s_ease-out] items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">{count}</span>}
           </button>
@@ -149,7 +184,7 @@ export function SiteHeader({ storeName, logoUrl, categories }: Props) {
       </div>
 
       {searchOpen && (
-        <div className="container-page animate-[fade-up_0.2s_ease-out] pb-3 xl:hidden">
+        <div className={cn("container-page animate-[fade-up_0.2s_ease-out] pb-3", !compact && "xl:hidden")}>
           <SearchBox autoFocus onNavigate={() => setSearchOpen(false)} />
         </div>
       )}
