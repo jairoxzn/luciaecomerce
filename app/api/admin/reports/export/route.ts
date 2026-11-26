@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { assertAdmin, AuthError } from "@/lib/auth/guards";
+import { isCrossSite } from "@/lib/csrf";
 import { logAudit } from "@/lib/audit";
 import { defaultRange } from "@/lib/services/reports";
 import { getDataset, isReportType, type Dataset } from "@/lib/services/report-datasets";
@@ -72,6 +73,8 @@ function toPdf(ds: Dataset, store: string, rangeLabel: string): Promise<Buffer> 
 }
 
 export async function GET(req: Request) {
+  // Es un GET, pero deja rastro en la auditoría: un enlace de otro sitio no debe poder dispararlo con la sesión del admin
+  if (isCrossSite(req)) return NextResponse.json({ error: "Solicitud no permitida." }, { status: 403 });
   try {
     const admin = await assertAdmin();
     const sp = new URL(req.url).searchParams;

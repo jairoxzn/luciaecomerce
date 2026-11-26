@@ -3,11 +3,10 @@ import { cache } from "react";
 import { prisma } from "@/lib/prisma";
 import { SESSION_COOKIE, SESSION_DAYS } from "@/lib/constants";
 import { hashToken, newToken } from "./tokens";
+import { secureCookies } from "./cookies";
 import type { Role } from "@prisma/client";
 
 export type SessionUser = { id: string; email: string; name: string; role: Role };
-
-const isSecure = () => (process.env.NEXT_PUBLIC_SITE_URL ?? "").startsWith("https://");
 
 export async function createSession(userId: string) {
   const token = newToken();
@@ -25,7 +24,7 @@ export async function createSession(userId: string) {
   (await cookies()).set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: isSecure(),
+    secure: secureCookies(),
     path: "/",
     expires: expiresAt,
   });

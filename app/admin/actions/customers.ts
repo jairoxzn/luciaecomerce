@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { run, UserError, type ActionResult } from "@/lib/action";
 import { assertAdmin } from "@/lib/auth/guards";
 import { logAudit } from "@/lib/audit";
-import { createResetLink } from "@/app/actions/auth";
+import { createResetLink } from "@/lib/services/password-reset";
 
 export async function toggleCustomerActiveAction(userId: string): Promise<ActionResult> {
   return run(async () => {

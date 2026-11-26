@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth/session";
+import { secureCookies } from "@/lib/auth/cookies";
 
 /**
  * Acceso a pedidos:
@@ -40,7 +41,7 @@ export async function grantGuestAccess(code: string) {
   (await cookies()).set(COOKIE, `${payload}.${sign(payload)}`, {
     httpOnly: true,
     sameSite: "lax",
-    secure: (process.env.NEXT_PUBLIC_SITE_URL ?? "").startsWith("https://"),
+    secure: secureCookies(),
     path: "/",
     maxAge: 60 * 60 * 24 * 90,
   });

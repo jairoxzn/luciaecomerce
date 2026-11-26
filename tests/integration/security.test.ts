@@ -22,7 +22,7 @@ import { toggleFavoriteAction } from "@/app/actions/account";
 import { getAccessibleOrderId, grantGuestAccess } from "@/lib/auth/order-access";
 import { rateLimit } from "@/lib/rate-limit";
 import { createOrder } from "@/lib/services/orders";
-import { createResetLink } from "@/app/actions/auth";
+import { createResetLink } from "@/lib/services/password-reset";
 import { makeProduct, orderInput, prisma, resetDb, seedBasics } from "../helpers";
 
 let customerId: string;

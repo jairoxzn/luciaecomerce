@@ -4,12 +4,12 @@ import { prisma } from "@/lib/prisma";
 import { run, type ActionResult, UserError } from "@/lib/action";
 import { hashPassword, verifyPassword, DUMMY_HASH } from "@/lib/auth/password";
 import { createSession, destroySession, destroyAllSessions, getCurrentUser, currentTokenHash } from "@/lib/auth/session";
-import { hashToken, newToken } from "@/lib/auth/tokens";
+import { hashToken } from "@/lib/auth/tokens";
 import { assertUser } from "@/lib/auth/guards";
 import { clientIp, rateLimit, resetRateLimit } from "@/lib/rate-limit";
 import { forgotSchema, loginSchema, registerSchema, resetSchema, safeNext, changePasswordSchema, profileSchema, type LoginInput, type RegisterInput, type ProfileInput } from "@/lib/validations/auth";
 import { mailerConfigured, sendMail } from "@/lib/mailer";
-import { absoluteUrl } from "@/lib/utils";
+import { createResetLink } from "@/lib/services/password-reset";
 import { getSettings } from "@/lib/services/settings";
 import { logAudit } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
@@ -64,14 +64,6 @@ export async function logoutAction(): Promise<ActionResult> {
     await destroySession();
     return { ok: true };
   });
-}
-
-/** Crea un token de recuperación (1 h). Devuelve la URL (solo para uso interno / panel admin). */
-export async function createResetLink(userId: string) {
-  const token = newToken();
-  await prisma.passwordResetToken.updateMany({ where: { userId, usedAt: null }, data: { usedAt: new Date() } });
-  await prisma.passwordResetToken.create({ data: { userId, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + 3600_000) } });
-  return absoluteUrl(`/restablecer/${token}`);
 }
 
 export async function forgotPasswordAction(raw: { email: string }): Promise<ActionResult<{ emailConfigured: boolean }>> {
